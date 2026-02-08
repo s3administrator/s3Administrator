@@ -1,12 +1,16 @@
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { ThemeSwitcher } from "@/components/theme-switcher"
+import { auth } from "@/lib/auth"
 
-export default function MarketingLayout({
+export default async function MarketingLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const session = await auth()
+  const isAuthenticated = Boolean(session?.user?.id)
+
   return (
     <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -23,7 +27,9 @@ export default function MarketingLayout({
             </Link>
             <ThemeSwitcher />
             <Button size="sm" asChild>
-              <Link href="/login">Sign In</Link>
+              <Link href={isAuthenticated ? "/dashboard" : "/login"}>
+                {isAuthenticated ? "Dashboard" : "Sign In"}
+              </Link>
             </Button>
           </nav>
         </div>

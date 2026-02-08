@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import {
   Database,
+  LayoutDashboard,
   Settings,
   CreditCard,
   LogOut,
@@ -92,6 +93,10 @@ export function Sidebar() {
   const [bucketSortDir, setBucketSortDir] = useState<"asc" | "desc">("asc")
   const [selectedCredentials, setSelectedCredentials] = useState<string[]>([])
   const isAdmin = session?.user?.role === "admin"
+  const isOverviewActive =
+    pathname === "/dashboard" &&
+    !searchParams.get("bucket") &&
+    !searchParams.get("prefix")
 
   const { data: buckets = [], isLoading: bucketsLoading } = useQuery<Bucket[]>({
     queryKey: ["buckets"],
@@ -415,6 +420,17 @@ export function Sidebar() {
 
         <Separator />
         <div className="space-y-1 p-3">
+          <Link
+            href="/dashboard"
+            className={cn(
+              "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent",
+              isOverviewActive && "bg-accent"
+            )}
+          >
+            <LayoutDashboard className="h-4 w-4" />
+            Overview
+          </Link>
+
           <Link
             href="/dashboard/search"
             className={cn(

@@ -19,7 +19,7 @@ interface NewFolderDialogProps {
   bucket: string
   credentialId?: string
   prefix: string
-  onCreateComplete: () => void
+  onCreateComplete: (createdKey: string) => void | Promise<void>
 }
 
 export function NewFolderDialog({
@@ -50,7 +50,7 @@ export function NewFolderDialog({
 
       toast.success(`Folder "${name}" created`)
       setName("")
-      onCreateComplete()
+      await onCreateComplete(key)
       onOpenChange(false)
     } catch {
       toast.error("Failed to create folder")

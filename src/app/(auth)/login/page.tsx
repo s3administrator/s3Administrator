@@ -2,7 +2,9 @@
 
 import { useState } from "react"
 import { signIn } from "next-auth/react"
+import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
+import { useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -20,7 +22,14 @@ export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [oauthLoading, setOauthLoading] = useState<string | null>(null)
+  const { status } = useSession()
   const router = useRouter()
+
+  useEffect(() => {
+    if (status === "authenticated") {
+      router.replace("/dashboard")
+    }
+  }, [status, router])
 
   async function handleEmailSignIn(e: React.FormEvent) {
     e.preventDefault()
@@ -42,6 +51,10 @@ export default function LoginPage() {
   async function handleOAuthSignIn(provider: string) {
     setOauthLoading(provider)
     await signIn(provider, { callbackUrl: "/dashboard" })
+  }
+
+  if (status === "authenticated") {
+    return null
   }
 
   return (

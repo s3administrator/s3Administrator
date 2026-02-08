@@ -32,7 +32,7 @@ interface DeleteConfirmDialogProps {
   items: S3Object[]
   bucket: string
   credentialId?: string
-  onDeleteComplete: () => void
+  onDeleteComplete: () => void | Promise<void>
 }
 
 export function DeleteConfirmDialog({
@@ -138,7 +138,7 @@ export function DeleteConfirmDialog({
 
       const data = await res.json()
       toast.success(`Deleted ${data.deleted} item(s)`)
-      onDeleteComplete()
+      await onDeleteComplete()
       onOpenChange(false)
     } catch {
       toast.error("Failed to delete items")

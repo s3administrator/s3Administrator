@@ -1,4 +1,6 @@
+import Link from "next/link"
 import { FolderOpen, HardDrive, KeyRound } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
 interface EmptyStateProps {
   type: "no-files" | "no-buckets" | "no-credentials"
@@ -22,11 +24,13 @@ const CONFIG = {
     title: "No credentials configured",
     description:
       "Add your S3 credentials in Settings to start managing your storage.",
+    actionLabel: "Add Credentials",
+    actionHref: "/settings",
   },
 } as const
 
 export function EmptyState({ type }: EmptyStateProps) {
-  const { icon: Icon, title, description } = CONFIG[type]
+  const { icon: Icon, title, description, actionLabel, actionHref } = CONFIG[type]
 
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -35,6 +39,11 @@ export function EmptyState({ type }: EmptyStateProps) {
       </div>
       <h3 className="mb-2 text-lg font-semibold">{title}</h3>
       <p className="max-w-sm text-sm text-muted-foreground">{description}</p>
+      {actionLabel && actionHref ? (
+        <Button asChild variant="outline" className="mt-4">
+          <Link href={actionHref}>{actionLabel}</Link>
+        </Button>
+      ) : null}
     </div>
   )
 }

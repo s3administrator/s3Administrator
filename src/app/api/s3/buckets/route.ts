@@ -17,13 +17,13 @@ export async function GET(request: NextRequest) {
 
     // If requesting a specific credential or just default, use single credential
     if (credentialId || !all) {
-      const { client } = await getS3Client(session.user.id, credentialId || undefined)
+      const { client, credential } = await getS3Client(session.user.id, credentialId || undefined)
       const response = await client.send(new ListBucketsCommand({}))
 
       const buckets = (response.Buckets ?? []).map((b) => ({
         name: b.Name ?? "",
         creationDate: b.CreationDate?.toISOString() ?? null,
-        credentialId: credentialId || "default",
+        credentialId: credential.id,
       }))
 
       return NextResponse.json({ buckets })
@@ -49,9 +49,10 @@ export async function GET(request: NextRequest) {
 
         for (const b of response.Buckets ?? []) {
           const bucketName = b.Name ?? ""
-          // Add bucket only from first credential that has it (avoid duplicates)
-          if (!bucketSet.has(bucketName)) {
-            bucketSet.add(bucketName)
+          const bucketKey = `${cred.id}::${bucketName}`
+          // Add bucket once per credential + bucket pair.
+          if (!bucketSet.has(bucketKey)) {
+            bucketSet.add(bucketKey)
             allBuckets.push({
               name: bucketName,
               creationDate: b.CreationDate?.toISOString() ?? null,

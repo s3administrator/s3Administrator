@@ -20,7 +20,7 @@ interface RenameDialogProps {
   credentialId?: string
   currentKey: string
   isFolder: boolean
-  onRenameComplete: () => void
+  onRenameComplete: () => void | Promise<void>
 }
 
 export function RenameDialog({
@@ -60,7 +60,7 @@ export function RenameDialog({
       if (!res.ok) throw new Error("Rename failed")
 
       toast.success("Renamed successfully")
-      onRenameComplete()
+      await onRenameComplete()
       onOpenChange(false)
     } catch {
       toast.error("Failed to rename")

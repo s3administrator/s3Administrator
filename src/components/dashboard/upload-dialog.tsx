@@ -21,7 +21,7 @@ interface UploadDialogProps {
   bucket: string
   credentialId?: string
   prefix: string
-  onUploadComplete: () => void
+  onUploadComplete: () => void | Promise<void>
 }
 
 interface UploadFile {
@@ -65,6 +65,10 @@ export function UploadDialog({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
   const ensuredCorsBucketsRef = useRef<Set<string>>(new Set())
+  const uploadedCount = files.filter((item) => item.status === "done").length
+  const failedCount = files.filter((item) => item.status === "error").length
+  const processedCount = uploadedCount + failedCount
+  const allUploadsDone = files.length > 0 && uploadedCount === files.length
 
   const setFileAt = useCallback((index: number, updater: (file: UploadFile) => UploadFile) => {
     setFiles((prev) => prev.map((item, idx) => (idx === index ? updater(item) : item)))
@@ -418,7 +422,11 @@ export function UploadDialog({
     }
 
     if (uploadedItems.length > 0) {
-      onUploadComplete()
+      try {
+        await onUploadComplete()
+      } catch {
+        toast.error("Upload finished, but bucket sync failed")
+      }
     }
   }
 
@@ -427,6 +435,15 @@ export function UploadDialog({
       setFiles([])
       onOpenChange(openState)
     }
+  }
+
+  async function handlePrimaryAction() {
+    if (allUploadsDone) {
+      handleClose(false)
+      return
+    }
+
+    await handleUpload()
   }
 
   return (
@@ -545,13 +562,17 @@ export function UploadDialog({
             Cancel
           </Button>
           <Button
-            onClick={handleUpload}
+            onClick={() => void handlePrimaryAction()}
             disabled={files.length === 0 || isUploading}
           >
             {isUploading ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : null}
-            Upload {files.length > 0 && `(${files.length})`}
+            {isUploading
+              ? `Uploading ${processedCount}/${files.length}`
+              : allUploadsDone
+                ? "Continue"
+              : `Upload${files.length > 0 ? ` (${files.length})` : ""}`}
           </Button>
         </div>
       </DialogContent>

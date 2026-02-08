@@ -1,6 +1,6 @@
 "use client"
 
-import { Trash2, Download, X } from "lucide-react"
+import { Trash2, Download, X, FolderPlus, FolderInput } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 interface MultiSelectToolbarProps {
@@ -8,6 +8,8 @@ interface MultiSelectToolbarProps {
   onDelete: () => void
   onDownload: () => void
   onClear: () => void
+  onCreateFolder?: () => void
+  onMoveToSelectedFolder?: () => void
   selectionHint?: string
   selectAllLabel?: string
   onSelectAllAcrossResults?: () => void
@@ -18,6 +20,8 @@ export function MultiSelectToolbar({
   onDelete,
   onDownload,
   onClear,
+  onCreateFolder,
+  onMoveToSelectedFolder,
   selectionHint,
   selectAllLabel,
   onSelectAllAcrossResults,
@@ -45,6 +49,18 @@ export function MultiSelectToolbar({
             <Download className="mr-1.5 h-4 w-4" />
             Download
           </Button>
+          {onCreateFolder ? (
+            <Button variant="outline" size="sm" onClick={onCreateFolder}>
+              <FolderPlus className="mr-1.5 h-4 w-4" />
+              New Folder
+            </Button>
+          ) : null}
+          {onMoveToSelectedFolder ? (
+            <Button variant="outline" size="sm" onClick={onMoveToSelectedFolder}>
+              <FolderInput className="mr-1.5 h-4 w-4" />
+              Move to Folder
+            </Button>
+          ) : null}
           <Button variant="destructive" size="sm" onClick={onDelete}>
             <Trash2 className="mr-1.5 h-4 w-4" />
             Delete

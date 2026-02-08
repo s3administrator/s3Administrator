@@ -268,6 +268,31 @@ export function GlobalSearch() {
     queryClient.invalidateQueries({ queryKey: ["objects"] })
   }
 
+  const triggerBrowserDownload = (url: string, filename?: string) => {
+    const link = document.createElement("a")
+    link.href = url
+    if (filename) {
+      link.download = filename
+    }
+    link.rel = "noopener noreferrer"
+    link.style.display = "none"
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+  }
+
+  const syncBucketAfterOperation = async (bucket: string, credentialId: string) => {
+    const res = await fetch("/api/s3/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bucket, credentialId }),
+    })
+
+    if (!res.ok) {
+      throw new Error("Sync failed")
+    }
+  }
+
   const handleDownload = async (item: SearchItem) => {
     try {
       const res = await fetch("/api/s3/download", {
@@ -284,8 +309,8 @@ export function GlobalSearch() {
         throw new Error("Failed to create download URL")
       }
 
-      const { url } = await res.json()
-      window.open(url, "_blank")
+      const { url, filename } = await res.json()
+      triggerBrowserDownload(url, filename)
     } catch {
       toast.error(`Failed to download ${item.key}`)
     }
@@ -629,7 +654,12 @@ export function GlobalSearch() {
           items={deleteItems}
           bucket={deleteContext.bucket}
           credentialId={deleteContext.credentialId}
-          onDeleteComplete={() => {
+          onDeleteComplete={async () => {
+            try {
+              await syncBucketAfterOperation(deleteContext.bucket, deleteContext.credentialId)
+            } catch {
+              toast.error("Delete completed, but bucket sync failed")
+            }
             setDeleteItems([])
             setDeleteContext(null)
             resetResultsState()
@@ -650,7 +680,14 @@ export function GlobalSearch() {
           credentialId={renameTarget.credentialId}
           currentKey={renameTarget.key}
           isFolder={renameTarget.isFolder}
-          onRenameComplete={resetResultsState}
+          onRenameComplete={async () => {
+            try {
+              await syncBucketAfterOperation(renameTarget.bucket, renameTarget.credentialId)
+            } catch {
+              toast.error("Rename completed, but bucket sync failed")
+            }
+            resetResultsState()
+          }}
         />
       )}
 
