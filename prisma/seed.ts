@@ -1,6 +1,15 @@
 import { PrismaClient } from "@prisma/client"
+import Stripe from "stripe"
 
 const prisma = new PrismaClient()
+
+function getStripe(): Stripe | null {
+  const key =
+    process.env[`STRIPE_SECRET_KEY_${(process.env.ENVIRONMENT || "DEV").toUpperCase()}`] ||
+    process.env.STRIPE_SECRET_KEY
+  if (!key) return null
+  return new Stripe(key, { apiVersion: "2026-01-28.clover" })
+}
 
 const defaultPlans = [
   {
@@ -42,9 +51,33 @@ const defaultPlans = [
 ]
 
 async function main() {
+  const stripe = getStripe()
   console.log("Seeding default plans...")
+  if (!stripe) {
+    console.log("  STRIPE_SECRET_KEY not set — skipping Stripe price creation")
+  }
 
   for (const plan of defaultPlans) {
+    const existing = await prisma.plan.findUnique({ where: { slug: plan.slug } })
+
+    // Create Stripe product+price for paid plans that don't have one yet
+    let stripePriceId = existing?.stripePriceId ?? null
+    if (stripe && plan.priceMonthly > 0 && !stripePriceId) {
+      console.log(`  Creating Stripe product+price for ${plan.slug}...`)
+      const product = await stripe.products.create({
+        name: plan.name,
+        metadata: { slug: plan.slug },
+      })
+      const price = await stripe.prices.create({
+        product: product.id,
+        unit_amount: plan.priceMonthly,
+        currency: "usd",
+        recurring: { interval: "month" },
+        metadata: { slug: plan.slug },
+      })
+      stripePriceId = price.id
+    }
+
     await prisma.plan.upsert({
       where: { slug: plan.slug },
       update: {
@@ -53,10 +86,11 @@ async function main() {
         fileLimit: plan.fileLimit,
         features: plan.features,
         sortOrder: plan.sortOrder,
+        ...(stripePriceId && !existing?.stripePriceId ? { stripePriceId } : {}),
       },
-      create: plan,
+      create: { ...plan, stripePriceId },
     })
-    console.log(`  Upserted plan: ${plan.slug}`)
+    console.log(`  Upserted plan: ${plan.slug}${stripePriceId ? ` (price: ${stripePriceId})` : ""}`)
   }
 
   console.log("Seeding complete.")

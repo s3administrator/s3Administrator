@@ -14,7 +14,6 @@ export async function POST(req: NextRequest) {
     const checkoutSession = await stripe.checkout.sessions.create({
       mode: "subscription",
       line_items: [{ price: plan.stripePriceId, quantity: 1 }],
-      customer_creation: "always",
       success_url: `${process.env.AUTH_URL}/api/auth/subscribe-callback?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${process.env.AUTH_URL}/pricing?canceled=true`,
       metadata: { planId: plan.id, tier: plan.slug, guest: "true" },
