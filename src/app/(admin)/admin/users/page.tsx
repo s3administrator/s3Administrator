@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { toast } from "sonner"
+import { Trash2 } from "lucide-react"
 
 interface AdminUser {
   id: string
@@ -76,6 +77,23 @@ export default function AdminUsersPage() {
     onError: () => toast.error("Failed to update user"),
   })
 
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/admin/users/${id}`, { method: "DELETE" })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error ?? "Failed to delete user")
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] })
+      queryClient.invalidateQueries({ queryKey: ["admin-stats"] })
+      toast.success("User deleted")
+    },
+    onError: (err) =>
+      toast.error(err instanceof Error ? err.message : "Failed to delete user"),
+  })
+
   const totalPages = data ? Math.ceil(data.total / data.limit) : 1
 
   return (
@@ -105,6 +123,7 @@ export default function AdminUsersPage() {
                   <TableHead>Credentials</TableHead>
                   <TableHead>Files</TableHead>
                   <TableHead>Joined</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -158,6 +177,23 @@ export default function AdminUsersPage() {
                       {new Date(user.createdAt).toLocaleDateString("en-US", {
                         timeZone: "UTC",
                       })}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          if (
+                            confirm(
+                              `Delete user "${user.email}"? This will cancel their subscriptions and remove all their data.`
+                            )
+                          ) {
+                            deleteMutation.mutate(user.id)
+                          }
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}

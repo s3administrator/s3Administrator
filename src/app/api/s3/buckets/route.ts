@@ -40,7 +40,9 @@ export async function GET(request: NextRequest) {
       creationDate: string | null
       credentialId: string
     }> = []
-    const bucketSet = new Set<string>()
+    // Deduplicate by bucket name across all credentials — if two credentials
+    // can access the same bucket, show it only once (first credential wins).
+    const seenBucketNames = new Set<string>()
 
     for (const cred of credentials) {
       try {
@@ -49,10 +51,8 @@ export async function GET(request: NextRequest) {
 
         for (const b of response.Buckets ?? []) {
           const bucketName = b.Name ?? ""
-          const bucketKey = `${cred.id}::${bucketName}`
-          // Add bucket once per credential + bucket pair.
-          if (!bucketSet.has(bucketKey)) {
-            bucketSet.add(bucketKey)
+          if (!seenBucketNames.has(bucketName)) {
+            seenBucketNames.add(bucketName)
             allBuckets.push({
               name: bucketName,
               creationDate: b.CreationDate?.toISOString() ?? null,

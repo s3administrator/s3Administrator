@@ -15,7 +15,10 @@ export async function POST() {
   })
 
   if (!user?.stripeCustomerId) {
-    return NextResponse.json({ error: "No subscription" }, { status: 400 })
+    return NextResponse.json(
+      { error: "No active subscription to manage. You are on the free plan." },
+      { status: 400 },
+    )
   }
 
   const portalSession = await stripe.billingPortal.sessions.create({

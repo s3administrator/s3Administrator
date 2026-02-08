@@ -23,19 +23,127 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 })
   }
 
+  // In Stripe v20+, current_period_start/end are on subscription items, not the subscription itself
+  function getPeriodDates(sub: Stripe.Subscription) {
+    const item = sub.items.data[0]
+    return {
+      start: new Date((item?.current_period_start ?? 0) * 1000),
+      end: new Date((item?.current_period_end ?? 0) * 1000),
+    }
+  }
+
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object as Stripe.Checkout.Session
       const userId = session.metadata?.userId
+      const planId = session.metadata?.planId
       const tier = session.metadata?.tier
-      if (userId && tier) {
+      const stripeSubId = session.subscription as string
+
+      if (userId && tier && stripeSubId) {
+        // Authenticated checkout — user already exists
+        const stripeSub = await stripe.subscriptions.retrieve(stripeSubId)
+
         await prisma.user.update({
           where: { id: userId },
           data: {
             tier,
-            stripeSubscriptionId: session.subscription as string,
+            stripeSubscriptionId: stripeSubId,
           },
         })
+
+        if (planId) {
+          const period = getPeriodDates(stripeSub)
+          await prisma.subscription.upsert({
+            where: { stripeSubscriptionId: stripeSubId },
+            create: {
+              userId,
+              planId,
+              stripeSubscriptionId: stripeSubId,
+              stripeCustomerId: stripeSub.customer as string,
+              status: stripeSub.status,
+              currentPeriodStart: period.start,
+              currentPeriodEnd: period.end,
+            },
+            update: {
+              status: stripeSub.status,
+              currentPeriodStart: period.start,
+              currentPeriodEnd: period.end,
+            },
+          })
+        }
+      } else if (session.metadata?.guest === "true" && tier && stripeSubId && planId) {
+        // Guest checkout — find or create user from Stripe email
+        const customerEmail = session.customer_details?.email
+        const stripeCustomerId = session.customer as string
+
+        if (!customerEmail) {
+          console.error("Guest checkout webhook: no email in session")
+          break
+        }
+
+        const stripeSub = await stripe.subscriptions.retrieve(stripeSubId)
+        const period = getPeriodDates(stripeSub)
+
+        let user = await prisma.user.findUnique({
+          where: { email: customerEmail },
+        })
+
+        if (user) {
+          await prisma.user.update({
+            where: { id: user.id },
+            data: {
+              tier,
+              stripeCustomerId,
+              stripeSubscriptionId: stripeSubId,
+            },
+          })
+        } else {
+          try {
+            user = await prisma.user.create({
+              data: {
+                email: customerEmail,
+                emailVerified: new Date(),
+                tier,
+                stripeCustomerId,
+                stripeSubscriptionId: stripeSubId,
+              },
+            })
+          } catch (e: unknown) {
+            // Race condition: callback route may have created user first
+            if (e && typeof e === "object" && "code" in e && e.code === "P2002") {
+              user = await prisma.user.findUnique({ where: { email: customerEmail } })
+              if (user) {
+                await prisma.user.update({
+                  where: { id: user.id },
+                  data: { tier, stripeCustomerId, stripeSubscriptionId: stripeSubId },
+                })
+              }
+            } else {
+              throw e
+            }
+          }
+        }
+
+        if (user) {
+          await prisma.subscription.upsert({
+            where: { stripeSubscriptionId: stripeSubId },
+            create: {
+              userId: user.id,
+              planId,
+              stripeSubscriptionId: stripeSubId,
+              stripeCustomerId,
+              status: stripeSub.status,
+              currentPeriodStart: period.start,
+              currentPeriodEnd: period.end,
+            },
+            update: {
+              status: stripeSub.status,
+              currentPeriodStart: period.start,
+              currentPeriodEnd: period.end,
+            },
+          })
+        }
       }
       break
     }
@@ -43,19 +151,59 @@ export async function POST(req: NextRequest) {
     case "customer.subscription.updated": {
       const subscription = event.data.object as Stripe.Subscription
       const customerId = subscription.customer as string
+      const priceId = subscription.items.data[0]?.price?.id
+
       const user = await prisma.user.findUnique({
         where: { stripeCustomerId: customerId },
       })
-      if (user) {
-        const priceId = subscription.items.data[0]?.price?.id
-        let tier = "free"
-        if (priceId === process.env.STRIPE_STARTER_PRICE_ID) tier = "starter"
-        else if (priceId === process.env.STRIPE_PRO_PRICE_ID) tier = "pro"
+
+      if (user && priceId) {
+        // Look up the plan by stripePriceId
+        const plan = await prisma.plan.findUnique({
+          where: { stripePriceId: priceId },
+        })
+
+        const tier = plan?.slug ?? "free"
 
         await prisma.user.update({
           where: { id: user.id },
           data: { tier },
         })
+
+        // Update or create subscription record
+        const period = getPeriodDates(subscription)
+        const subData = {
+          status: subscription.status,
+          currentPeriodStart: period.start,
+          currentPeriodEnd: period.end,
+          cancelAtPeriodEnd: subscription.cancel_at_period_end,
+          canceledAt: subscription.canceled_at
+            ? new Date(subscription.canceled_at * 1000)
+            : null,
+        }
+
+        if (plan) {
+          await prisma.subscription.upsert({
+            where: { stripeSubscriptionId: subscription.id },
+            create: {
+              userId: user.id,
+              planId: plan.id,
+              stripeSubscriptionId: subscription.id,
+              stripeCustomerId: customerId,
+              ...subData,
+            },
+            update: {
+              planId: plan.id,
+              ...subData,
+            },
+          })
+        } else {
+          // Plan not found in DB — just update if exists
+          await prisma.subscription.updateMany({
+            where: { stripeSubscriptionId: subscription.id },
+            data: subData,
+          })
+        }
       }
       break
     }
@@ -63,9 +211,15 @@ export async function POST(req: NextRequest) {
     case "customer.subscription.deleted": {
       const subscription = event.data.object as Stripe.Subscription
       const customerId = subscription.customer as string
+
       await prisma.user.updateMany({
         where: { stripeCustomerId: customerId },
         data: { tier: "free", stripeSubscriptionId: null },
+      })
+
+      await prisma.subscription.updateMany({
+        where: { stripeSubscriptionId: subscription.id },
+        data: { status: "canceled" },
       })
       break
     }

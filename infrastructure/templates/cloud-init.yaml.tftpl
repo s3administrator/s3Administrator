@@ -1,0 +1,94 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+packages:
+  - ca-certificates
+  - curl
+  - git
+  - gnupg
+  - lsb-release
+  - ufw
+
+write_files:
+  - path: /usr/local/bin/bootstrap-s3administrator.sh
+    permissions: "0755"
+    owner: root:root
+    content: |
+      #!/usr/bin/env bash
+      set -euxo pipefail
+
+      if ! command -v docker >/dev/null 2>&1; then
+        curl -fsSL https://get.docker.com | sh
+      fi
+
+      if ! command -v caddy >/dev/null 2>&1; then
+        apt-get update
+        apt-get install -y debian-keyring debian-archive-keyring apt-transport-https
+        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/apt/sources.list.d/caddy-stable.list
+        apt-get update
+        apt-get install -y caddy
+      fi
+
+      systemctl enable --now docker
+
+      mkdir -p "${app_directory}"
+      if [ ! -d "${app_directory}/.git" ]; then
+        if [ -n "${github_token}" ]; then
+          git clone --depth 1 --branch "${app_branch}" "https://x-access-token:${github_token}@github.com/${app_repo}.git" "${app_directory}"
+        else
+          git clone --depth 1 --branch "${app_branch}" "https://github.com/${app_repo}.git" "${app_directory}"
+        fi
+      else
+        cd "${app_directory}"
+        git fetch --all --prune
+        git checkout "${app_branch}"
+        git reset --hard "origin/${app_branch}"
+      fi
+
+      cat > "${app_directory}/.env" <<'ENVEOF'
+      ${indent(6, app_env_content)}
+      ENVEOF
+
+      cat > /etc/caddy/Caddyfile <<'CADDYEOF'
+      ${domain} {
+        encode zstd gzip
+        reverse_proxy 127.0.0.1:3000
+      }
+      CADDYEOF
+
+      systemctl enable caddy
+      systemctl restart caddy
+
+      cd "${app_directory}"
+      docker compose -f docker/docker-compose.yml pull || true
+      docker compose -f docker/docker-compose.yml up -d --build --remove-orphans
+
+      cat > /etc/systemd/system/s3administrator.service <<'SERVICEEOF'
+      [Unit]
+      Description=S3 Administrator application stack
+      Requires=docker.service
+      After=network-online.target docker.service
+      Wants=network-online.target
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      WorkingDirectory=${app_directory}
+      ExecStart=/usr/bin/docker compose -f docker/docker-compose.yml up -d --build
+      ExecStop=/usr/bin/docker compose -f docker/docker-compose.yml down
+      TimeoutStartSec=0
+
+      [Install]
+      WantedBy=multi-user.target
+      SERVICEEOF
+
+      systemctl daemon-reload
+      systemctl enable s3administrator.service
+
+runcmd:
+  - ufw allow OpenSSH
+  - ufw allow 80/tcp
+  - ufw allow 443/tcp
+  - ufw --force enable
+  - /usr/local/bin/bootstrap-s3administrator.sh

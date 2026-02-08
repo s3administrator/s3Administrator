@@ -5,12 +5,14 @@ import { usePathname } from "next/navigation"
 import { signOut } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { Shield, Users, BarChart3, LogOut, ArrowLeft } from "lucide-react"
+import { Shield, Users, BarChart3, LogOut, ArrowLeft, Package, CreditCard } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const navItems = [
   { href: "/admin", label: "Overview", icon: BarChart3 },
   { href: "/admin/users", label: "Users", icon: Users },
+  { href: "/admin/plans", label: "Plans", icon: Package },
+  { href: "/admin/subscriptions", label: "Subscriptions", icon: CreditCard },
 ]
 
 export function AdminSidebar() {

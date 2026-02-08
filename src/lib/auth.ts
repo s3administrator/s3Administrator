@@ -3,8 +3,10 @@ import GitHub from "next-auth/providers/github"
 import Google from "next-auth/providers/google"
 import Resend from "next-auth/providers/resend"
 import { PrismaAdapter } from "@auth/prisma-adapter"
+import type { Adapter } from "next-auth/adapters"
 import { prisma } from "@/lib/db"
 import { Resend as ResendClient } from "resend"
+import { envVar } from "@/lib/env"
 
 function getResendClient() {
   const apiKey = process.env.RESEND_API_KEY
@@ -14,21 +16,19 @@ function getResendClient() {
 
 const providers = []
 
-if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
+const githubId = envVar("GITHUB_CLIENT_ID")
+const githubSecret = envVar("GITHUB_CLIENT_SECRET")
+if (githubId && githubSecret) {
   providers.push(
-    GitHub({
-      clientId: process.env.GITHUB_CLIENT_ID,
-      clientSecret: process.env.GITHUB_CLIENT_SECRET,
-    })
+    GitHub({ clientId: githubId, clientSecret: githubSecret })
   )
 }
 
-if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+const googleId = envVar("GOOGLE_CLIENT_ID")
+const googleSecret = envVar("GOOGLE_CLIENT_SECRET")
+if (googleId && googleSecret) {
   providers.push(
-    Google({
-      clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    })
+    Google({ clientId: googleId, clientSecret: googleSecret })
   )
 }
 
@@ -75,7 +75,7 @@ const adminEmails = (process.env.ADMIN_EMAILS ?? "")
   .filter(Boolean)
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  adapter: PrismaAdapter(prisma),
+  adapter: PrismaAdapter(prisma) as Adapter,
   providers,
   pages: {
     signIn: "/login",

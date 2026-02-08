@@ -6,21 +6,26 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - DATABASE_URL=postgresql://s3admin:${POSTGRES_PASSWORD:-password}@db:5432/s3_admin
+      - ENVIRONMENT=${ENVIRONMENT:-DEV}
+      - DATABASE_URL=postgresql://s3admin:${POSTGRES_PASSWORD}@db:5432/s3_admin
       - AUTH_SECRET=${AUTH_SECRET}
       - AUTH_URL=${AUTH_URL:-http://localhost:3000}
-      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
-      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
-      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      # OAuth — pass both _DEV and _PROD; the app resolves based on ENVIRONMENT
+      - GITHUB_CLIENT_ID_DEV=${GITHUB_CLIENT_ID_DEV}
+      - GITHUB_CLIENT_SECRET_DEV=${GITHUB_CLIENT_SECRET_DEV}
+      - GITHUB_CLIENT_ID_PROD=${GITHUB_CLIENT_ID_PROD}
+      - GITHUB_CLIENT_SECRET_PROD=${GITHUB_CLIENT_SECRET_PROD}
+      - GOOGLE_CLIENT_ID_DEV=${GOOGLE_CLIENT_ID_DEV}
+      - GOOGLE_CLIENT_SECRET_DEV=${GOOGLE_CLIENT_SECRET_DEV}
+      - GOOGLE_CLIENT_ID_PROD=${GOOGLE_CLIENT_ID_PROD}
+      - GOOGLE_CLIENT_SECRET_PROD=${GOOGLE_CLIENT_SECRET_PROD}
       - RESEND_API_KEY=${RESEND_API_KEY}
       - EMAIL_FROM=${EMAIL_FROM}
       - ENCRYPTION_MASTER_KEY=${ENCRYPTION_MASTER_KEY}
       - ENCRYPTION_SALT=${ENCRYPTION_SALT}
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
-      - STRIPE_PRO_PRICE_ID=${STRIPE_PRO_PRICE_ID}
-      - STRIPE_TEAM_PRICE_ID=${STRIPE_TEAM_PRICE_ID}
+      - ADMIN_EMAILS=${ADMIN_EMAILS}
     depends_on:
       db:
         condition: service_healthy
@@ -29,12 +34,12 @@ services:
   db:
     image: postgres:16-alpine
     ports:
-      - "5433:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     environment:
       - POSTGRES_USER=s3admin
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=s3_admin
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U s3admin -d s3_admin"]

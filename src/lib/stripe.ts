@@ -1,7 +1,8 @@
 import Stripe from "stripe"
+import { envVar } from "@/lib/env"
 
 function getStripeClient() {
-  const key = process.env.STRIPE_SECRET_KEY
+  const key = envVar("STRIPE_SECRET_KEY")
   if (!key) {
     throw new Error("STRIPE_SECRET_KEY is not configured")
   }
@@ -25,13 +26,3 @@ export const stripe = new Proxy({} as Stripe, {
   },
 })
 
-export function getPriceIdForTier(tier: string): string | null {
-  switch (tier) {
-    case "starter":
-      return process.env.STRIPE_STARTER_PRICE_ID || null
-    case "pro":
-      return process.env.STRIPE_PRO_PRICE_ID || null
-    default:
-      return null
-  }
-}

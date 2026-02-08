@@ -3,66 +3,44 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Check } from "lucide-react"
+import { prisma } from "@/lib/db"
+import { SubscribeButton } from "@/components/pricing/subscribe-button"
 
-const plans = [
-  {
-    name: "Free",
-    price: "$0",
-    description: "For trying it out",
-    features: ["1 bucket", "1,000 cached files", "All file operations", "Metadata caching"],
-    cta: "Get Started",
-    href: "/login",
-    popular: false,
-  },
-  {
-    name: "Starter",
-    price: "$3",
-    description: "For individual developers",
-    features: [
-      "10 buckets",
-      "10,000 cached files",
-      "All file operations",
-      "Metadata caching",
-      "Priority support",
-    ],
-    cta: "Upgrade to Starter",
-    href: "/login",
-    popular: false,
-  },
-  {
-    name: "Pro",
-    price: "$9",
-    description: "For power users",
-    features: [
-      "Unlimited buckets",
-      "100,000 cached files",
-      "All file operations",
-      "Metadata caching",
-      "Priority support",
-    ],
-    cta: "Upgrade to Pro",
-    href: "/login",
-    popular: true,
-  },
-  {
-    name: "Enterprise",
-    price: "Custom",
-    description: "For teams and organizations",
-    features: [
-      "Unlimited buckets",
-      "Unlimited cached files",
-      "All file operations",
-      "Metadata caching",
-      "Priority support",
-      "Dedicated support",
-    ],
-    cta: "Contact Us",
-    href: "mailto:hello@s3administrator.com",
-    popular: false,
-  },
-]
+function formatPrice(cents: number): string {
+  if (cents === 0) return "$0"
+  return `$${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`
+}
 
-export default function PricingPage() {
+function formatLimit(n: number): string {
+  if (n === 0) return "Unlimited"
+  return n.toLocaleString()
+}
+
+function isContactPlan(plan: { priceMonthly: number; stripePriceId: string | null; slug: string }): boolean {
+  return plan.priceMonthly === 0 && !plan.stripePriceId && plan.slug !== "free"
+}
+
+export default async function PricingPage() {
+  const plans = await prisma.plan.findMany({
+    where: { isActive: true },
+    orderBy: { sortOrder: "asc" },
+    select: {
+      id: true,
+      slug: true,
+      name: true,
+      priceMonthly: true,
+      bucketLimit: true,
+      fileLimit: true,
+      features: true,
+      stripePriceId: true,
+    },
+  })
+
+  // Find which plan to mark as popular (highest priced plan with a stripe price)
+  const popularSlug = plans
+    .filter((p) => p.stripePriceId)
+    .sort((a, b) => b.priceMonthly - a.priceMonthly)[0]?.slug
+
   return (
     <section className="mx-auto max-w-6xl px-4 py-24">
       <div className="text-center">
@@ -71,46 +49,77 @@ export default function PricingPage() {
           Start free, upgrade when you need more.
         </p>
       </div>
-      <div className="mt-12 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
-        {plans.map((plan) => (
-          <Card
-            key={plan.name}
-            className={plan.popular ? "border-primary shadow-md" : ""}
-          >
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>{plan.name}</CardTitle>
-                {plan.popular && <Badge>Popular</Badge>}
-              </div>
-              <div className="mt-2">
-                <span className="text-3xl font-bold">{plan.price}</span>
-                {plan.price !== "Custom" && (
-                  <span className="text-muted-foreground">/month</span>
-                )}
-              </div>
-              <p className="text-sm text-muted-foreground">
-                {plan.description}
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <ul className="space-y-2">
-                {plan.features.map((feature) => (
-                  <li key={feature} className="flex items-center gap-2 text-sm">
+      <div
+        className="mt-12 grid gap-8 sm:grid-cols-2"
+        style={{
+          gridTemplateColumns: `repeat(${Math.min(plans.length, 4)}, minmax(0, 1fr))`,
+        }}
+      >
+        {plans.map((plan) => {
+          const popular = plan.slug === popularSlug
+          const contact = isContactPlan(plan)
+
+          return (
+            <Card
+              key={plan.id}
+              className={`flex flex-col ${popular ? "border-primary shadow-md" : ""}`}
+            >
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>{plan.name}</CardTitle>
+                  {popular && <Badge>Popular</Badge>}
+                </div>
+                <div className="mt-2">
+                  <span className="text-3xl font-bold">
+                    {contact ? "Custom" : plan.priceMonthly === 0 ? "Free" : formatPrice(plan.priceMonthly)}
+                  </span>
+                  {plan.priceMonthly > 0 && (
+                    <span className="text-muted-foreground">/month</span>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="flex flex-1 flex-col space-y-4">
+                <ul className="space-y-2">
+                  <li className="flex items-center gap-2 text-sm">
                     <Check className="h-4 w-4 text-primary" />
-                    {feature}
+                    {formatLimit(plan.bucketLimit)} bucket{plan.bucketLimit !== 1 ? "s" : ""}
                   </li>
-                ))}
-              </ul>
-              <Button
-                className="w-full"
-                variant={plan.popular ? "default" : "outline"}
-                asChild
-              >
-                <Link href={plan.href}>{plan.cta}</Link>
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
+                  <li className="flex items-center gap-2 text-sm">
+                    <Check className="h-4 w-4 text-primary" />
+                    {formatLimit(plan.fileLimit)} cached files
+                  </li>
+                  {plan.features.map((feature) => (
+                    <li key={feature} className="flex items-center gap-2 text-sm">
+                      <Check className="h-4 w-4 text-primary" />
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-auto">
+                  {contact ? (
+                    <Button className="w-full" variant="outline" asChild>
+                      <a href="mailto:hello@s3administrator.com">Contact Us</a>
+                    </Button>
+                  ) : plan.stripePriceId ? (
+                    <SubscribeButton
+                      planId={plan.id}
+                      label="Get Started"
+                      popular={popular}
+                    />
+                  ) : (
+                    <Button
+                      className="w-full"
+                      variant="outline"
+                      asChild
+                    >
+                      <Link href="/login">Get Started</Link>
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )
+        })}
       </div>
     </section>
   )

@@ -6,7 +6,15 @@ interface EmptyStateProps {
   type: "no-files" | "no-buckets" | "no-credentials"
 }
 
-const CONFIG = {
+type EmptyStateConfigItem = {
+  icon: typeof FolderOpen
+  title: string
+  description: string
+  actionLabel?: string
+  actionHref?: string
+}
+
+const CONFIG: Record<EmptyStateProps["type"], EmptyStateConfigItem> = {
   "no-files": {
     icon: FolderOpen,
     title: "No files here",
@@ -27,7 +35,7 @@ const CONFIG = {
     actionLabel: "Add Credentials",
     actionHref: "/settings",
   },
-} as const
+}
 
 export function EmptyState({ type }: EmptyStateProps) {
   const { icon: Icon, title, description, actionLabel, actionHref } = CONFIG[type]
