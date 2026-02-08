@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { ThemeSwitcher } from "@/components/theme-switcher"
 
 export default function MarketingLayout({
   children,
@@ -20,6 +21,7 @@ export default function MarketingLayout({
             >
               Pricing
             </Link>
+            <ThemeSwitcher />
             <Button size="sm" asChild>
               <Link href="/login">Sign In</Link>
             </Button>

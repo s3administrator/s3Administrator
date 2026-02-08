@@ -27,10 +27,10 @@ export const stripe = new Proxy({} as Stripe, {
 
 export function getPriceIdForTier(tier: string): string | null {
   switch (tier) {
+    case "starter":
+      return process.env.STRIPE_STARTER_PRICE_ID || null
     case "pro":
       return process.env.STRIPE_PRO_PRICE_ID || null
-    case "team":
-      return process.env.STRIPE_TEAM_PRICE_ID || null
     default:
       return null
   }

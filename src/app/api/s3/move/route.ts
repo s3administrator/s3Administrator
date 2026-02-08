@@ -26,9 +26,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { bucket, sourceBucket, operations } = parsed.data
+    const { bucket, credentialId, sourceBucket, operations } = parsed.data
     const fromBucket = sourceBucket ?? bucket
-    const { client, credential } = await getS3Client(session.user.id)
+    const { client, credential } = await getS3Client(session.user.id, credentialId)
 
     let movedCount = 0
 

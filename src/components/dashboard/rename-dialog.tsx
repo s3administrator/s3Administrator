@@ -17,6 +17,7 @@ interface RenameDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   bucket: string
+  credentialId?: string
   currentKey: string
   isFolder: boolean
   onRenameComplete: () => void
@@ -26,6 +27,7 @@ export function RenameDialog({
   open,
   onOpenChange,
   bucket,
+  credentialId,
   currentKey,
   isFolder,
   onRenameComplete,
@@ -50,6 +52,7 @@ export function RenameDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           bucket,
+          credentialId,
           operations: [{ from: currentKey, to: newKey }],
         }),
       })

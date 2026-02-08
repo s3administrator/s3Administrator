@@ -49,8 +49,8 @@ export async function POST(req: NextRequest) {
       if (user) {
         const priceId = subscription.items.data[0]?.price?.id
         let tier = "free"
-        if (priceId === process.env.STRIPE_PRO_PRICE_ID) tier = "pro"
-        else if (priceId === process.env.STRIPE_TEAM_PRICE_ID) tier = "team"
+        if (priceId === process.env.STRIPE_STARTER_PRICE_ID) tier = "starter"
+        else if (priceId === process.env.STRIPE_PRO_PRICE_ID) tier = "pro"
 
         await prisma.user.update({
           where: { id: user.id },

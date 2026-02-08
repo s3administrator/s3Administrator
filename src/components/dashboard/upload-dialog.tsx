@@ -15,6 +15,7 @@ interface UploadDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   bucket: string
+  credentialId?: string
   prefix: string
   onUploadComplete: () => void
 }
@@ -29,6 +30,7 @@ export function UploadDialog({
   open,
   onOpenChange,
   bucket,
+  credentialId,
   prefix,
   onUploadComplete,
 }: UploadDialogProps) {
@@ -75,7 +77,7 @@ export function UploadDialog({
         const presignRes = await fetch("/api/s3/upload", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ bucket, key }),
+          body: JSON.stringify({ bucket, credentialId, key }),
         })
 
         if (!presignRes.ok) throw new Error("Failed to get upload URL")

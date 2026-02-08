@@ -1,33 +1,41 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/db"
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const session = await auth()
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const defaultCredential = await prisma.s3Credential.findFirst({
-      where: {
-        userId: session.user.id,
-        isDefault: true,
-      },
-      select: { id: true },
-    })
+    const { searchParams } = request.nextUrl
+    const all = searchParams.get("all") === "true"
+    const credentialId = searchParams.get("credentialId")
 
-    if (!defaultCredential) {
-      return NextResponse.json({ buckets: [] })
+    // Build where clause based on parameters
+    let whereClause: any = {
+      userId: session.user.id,
+      isFolder: false,
+    }
+
+    if (credentialId) {
+      whereClause.credentialId = credentialId
+    } else if (!all) {
+      // Default: only use the default credential
+      const defaultCred = await prisma.s3Credential.findFirst({
+        where: { userId: session.user.id, isDefault: true },
+        select: { id: true },
+      })
+      if (!defaultCred) {
+        return NextResponse.json({ buckets: [] })
+      }
+      whereClause.credentialId = defaultCred.id
     }
 
     const stats = await prisma.fileMetadata.groupBy({
-      by: ["bucket"],
-      where: {
-        userId: session.user.id,
-        credentialId: defaultCredential.id,
-        isFolder: false,
-      },
+      by: ["bucket", "credentialId"],
+      where: whereClause,
       _sum: { size: true },
       _count: { _all: true },
     })
@@ -36,6 +44,7 @@ export async function GET() {
       name: s.bucket,
       totalSize: Number(s._sum.size ?? 0),
       fileCount: s._count._all,
+      credentialId: s.credentialId,
     }))
 
     return NextResponse.json({ buckets })

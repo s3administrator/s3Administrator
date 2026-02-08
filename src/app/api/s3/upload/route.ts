@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { bucket, key } = body
+    const { bucket, key, credentialId } = body
 
     if (!bucket || !key) {
       return NextResponse.json(
@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { client } = await getS3Client(session.user.id)
+    const { client } = await getS3Client(session.user.id, credentialId)
 
     const command = new PutObjectCommand({
       Bucket: bucket,

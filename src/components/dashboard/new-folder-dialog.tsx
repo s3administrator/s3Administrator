@@ -17,6 +17,7 @@ interface NewFolderDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   bucket: string
+  credentialId?: string
   prefix: string
   onCreateComplete: () => void
 }
@@ -25,6 +26,7 @@ export function NewFolderDialog({
   open,
   onOpenChange,
   bucket,
+  credentialId,
   prefix,
   onCreateComplete,
 }: NewFolderDialogProps) {
@@ -41,7 +43,7 @@ export function NewFolderDialog({
       const res = await fetch("/api/s3/folder", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bucket, key }),
+        body: JSON.stringify({ bucket, credentialId, key }),
       })
 
       if (!res.ok) throw new Error("Failed to create folder")

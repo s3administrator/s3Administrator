@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { bucket } = body
+    const { bucket, credentialId } = body
 
     if (!bucket) {
       return NextResponse.json(
@@ -30,15 +30,7 @@ export async function POST(request: NextRequest) {
 
     const tierLimits = getTierLimits(user?.tier ?? "free")
 
-    const { client, credential } = await getS3Client(session.user.id)
-
-    // Get current cached file count for this user across all buckets
-    const currentCachedCount = await prisma.fileMetadata.count({
-      where: {
-        userId: session.user.id,
-        credentialId: credential.id,
-      },
-    })
+    const { client, credential } = await getS3Client(session.user.id, credentialId)
 
     // Count files in other buckets (to know how many slots are left for this bucket)
     const otherBucketCount = await prisma.fileMetadata.count({

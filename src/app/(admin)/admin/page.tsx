@@ -77,8 +77,8 @@ export default function AdminPage() {
       {stats?.tierBreakdown && (
         <div className="mt-6">
           <h2 className="mb-3 text-lg font-semibold">Subscription Breakdown</h2>
-          <div className="grid gap-4 sm:grid-cols-3">
-            {["free", "pro", "team"].map((tier) => (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {["free", "starter", "pro", "enterprise"].map((tier) => (
               <Card key={tier}>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium capitalize text-muted-foreground">

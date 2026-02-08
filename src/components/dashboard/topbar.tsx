@@ -30,6 +30,7 @@ import {
 interface TopbarProps {
   bucket: string
   prefix: string
+  credentialId?: string
   onSearch: (query: string) => void
   onUpload: () => void
   onSync: () => void
@@ -39,13 +40,16 @@ interface TopbarProps {
   sortDir?: string
 }
 
-function buildBreadcrumbSegments(bucket: string, prefix: string) {
+function buildBreadcrumbSegments(bucket: string, prefix: string, credentialId?: string) {
+  const credentialQuery = credentialId
+    ? `&credentialId=${encodeURIComponent(credentialId)}`
+    : ""
   const segments: { label: string; href: string }[] = []
 
   if (bucket) {
     segments.push({
       label: bucket,
-      href: `/dashboard?bucket=${encodeURIComponent(bucket)}`,
+      href: `/dashboard?bucket=${encodeURIComponent(bucket)}${credentialQuery}`,
     })
 
     if (prefix) {
@@ -55,7 +59,7 @@ function buildBreadcrumbSegments(bucket: string, prefix: string) {
         accumulated += part + "/"
         segments.push({
           label: part,
-          href: `/dashboard?bucket=${encodeURIComponent(bucket)}&prefix=${encodeURIComponent(accumulated)}`,
+          href: `/dashboard?bucket=${encodeURIComponent(bucket)}&prefix=${encodeURIComponent(accumulated)}${credentialQuery}`,
         })
       }
     }
@@ -67,6 +71,7 @@ function buildBreadcrumbSegments(bucket: string, prefix: string) {
 export function Topbar({
   bucket,
   prefix,
+  credentialId,
   onSearch,
   onUpload,
   onSync,
@@ -99,7 +104,7 @@ export function Topbar({
     }
   }, [])
 
-  const segments = buildBreadcrumbSegments(bucket, prefix)
+  const segments = buildBreadcrumbSegments(bucket, prefix, credentialId)
   const lastSegment = segments[segments.length - 1]
   const parentSegments = segments.slice(0, -1)
 

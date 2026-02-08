@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db"
 import { z } from "zod/v4"
 
 const updateUserSchema = z.object({
-  tier: z.enum(["free", "pro", "team"]).optional(),
+  tier: z.enum(["free", "starter", "pro", "enterprise"]).optional(),
   role: z.enum(["user", "admin"]).optional(),
 })
 

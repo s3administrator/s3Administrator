@@ -11,24 +11,26 @@ const plans = [
     description: "For trying it out",
     features: ["1 bucket", "1,000 cached files", "All file operations", "Metadata caching"],
     cta: "Get Started",
+    href: "/login",
     popular: false,
   },
   {
-    name: "Pro",
-    price: "$1",
+    name: "Starter",
+    price: "$3",
     description: "For individual developers",
     features: [
       "10 buckets",
-      "5,000 cached files",
+      "10,000 cached files",
       "All file operations",
       "Metadata caching",
       "Priority support",
     ],
-    cta: "Upgrade to Pro",
-    popular: true,
+    cta: "Upgrade to Starter",
+    href: "/login",
+    popular: false,
   },
   {
-    name: "Team",
+    name: "Pro",
     price: "$9",
     description: "For power users",
     features: [
@@ -38,7 +40,24 @@ const plans = [
       "Metadata caching",
       "Priority support",
     ],
-    cta: "Upgrade to Team",
+    cta: "Upgrade to Pro",
+    href: "/login",
+    popular: true,
+  },
+  {
+    name: "Enterprise",
+    price: "Custom",
+    description: "For teams and organizations",
+    features: [
+      "Unlimited buckets",
+      "Unlimited cached files",
+      "All file operations",
+      "Metadata caching",
+      "Priority support",
+      "Dedicated support",
+    ],
+    cta: "Contact Us",
+    href: "mailto:hello@s3administrator.com",
     popular: false,
   },
 ]
@@ -52,7 +71,7 @@ export default function PricingPage() {
           Start free, upgrade when you need more.
         </p>
       </div>
-      <div className="mt-12 grid gap-8 sm:grid-cols-3">
+      <div className="mt-12 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
         {plans.map((plan) => (
           <Card
             key={plan.name}
@@ -65,7 +84,9 @@ export default function PricingPage() {
               </div>
               <div className="mt-2">
                 <span className="text-3xl font-bold">{plan.price}</span>
-                <span className="text-muted-foreground">/month</span>
+                {plan.price !== "Custom" && (
+                  <span className="text-muted-foreground">/month</span>
+                )}
               </div>
               <p className="text-sm text-muted-foreground">
                 {plan.description}
@@ -85,7 +106,7 @@ export default function PricingPage() {
                 variant={plan.popular ? "default" : "outline"}
                 asChild
               >
-                <Link href="/login">{plan.cta}</Link>
+                <Link href={plan.href}>{plan.cta}</Link>
               </Button>
             </CardContent>
           </Card>

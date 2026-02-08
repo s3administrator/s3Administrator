@@ -146,8 +146,9 @@ export default function AdminUsersPage() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="free">free</SelectItem>
+                          <SelectItem value="starter">starter</SelectItem>
                           <SelectItem value="pro">pro</SelectItem>
-                          <SelectItem value="team">team</SelectItem>
+                          <SelectItem value="enterprise">enterprise</SelectItem>
                         </SelectContent>
                       </Select>
                     </TableCell>

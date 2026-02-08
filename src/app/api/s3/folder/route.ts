@@ -22,8 +22,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { bucket, key } = parsed.data
-    const { client, credential } = await getS3Client(session.user.id)
+    const { bucket, credentialId, key } = parsed.data
+    const { client, credential } = await getS3Client(session.user.id, credentialId)
 
     // Ensure key ends with /
     const folderKey = key.endsWith("/") ? key : `${key}/`

@@ -23,7 +23,7 @@ export default function LandingPage() {
               Manage your S3
               <br />
               <span className="bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-                like a file manager
+                like a pro
               </span>
             </h1>
 

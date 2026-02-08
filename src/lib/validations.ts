@@ -17,12 +17,15 @@ export const listObjectsSchema = z.object({
 
 export const deleteObjectsSchema = z.object({
   bucket: z.string().min(1),
+  credentialId: z.string().optional(),
   keys: z.array(z.string()).optional(),
   prefixes: z.array(z.string()).optional(),
+  dryRun: z.boolean().optional(),
 })
 
 export const moveObjectSchema = z.object({
   bucket: z.string().min(1),
+  credentialId: z.string().optional(),
   sourceBucket: z.string().optional(),
   operations: z.array(
     z.object({
@@ -40,5 +43,6 @@ export const searchObjectsSchema = z.object({
 
 export const createFolderSchema = z.object({
   bucket: z.string().min(1),
+  credentialId: z.string().optional(),
   key: z.string().min(1),
 })

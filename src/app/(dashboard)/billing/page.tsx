@@ -23,19 +23,29 @@ const plans = [
     features: ["1 bucket", "1,000 cached files"],
   },
   {
-    tier: "pro",
-    name: "Pro",
-    price: "$1",
-    features: ["10 buckets", "5,000 cached files", "Priority support"],
+    tier: "starter",
+    name: "Starter",
+    price: "$3",
+    features: ["10 buckets", "10,000 cached files", "Priority support"],
   },
   {
-    tier: "team",
-    name: "Team",
+    tier: "pro",
+    name: "Pro",
     price: "$9",
     features: [
       "Unlimited buckets",
       "100,000 cached files",
       "Priority support",
+    ],
+  },
+  {
+    tier: "enterprise",
+    name: "Enterprise",
+    price: "Custom",
+    features: [
+      "Unlimited buckets",
+      "Unlimited cached files",
+      "Dedicated support",
     ],
   },
 ]
@@ -87,7 +97,7 @@ export default function BillingPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl p-6">
+    <div className="mx-auto max-w-4xl p-6">
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Billing</h1>
         <p className="text-sm text-muted-foreground">
@@ -115,7 +125,7 @@ export default function BillingPage() {
         </Card>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {plans.map((plan) => (
           <Card
             key={plan.tier}
@@ -132,7 +142,7 @@ export default function BillingPage() {
                 <span className="text-2xl font-bold text-foreground">
                   {plan.price}
                 </span>
-                /month
+                {plan.price !== "Custom" && "/month"}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -144,7 +154,13 @@ export default function BillingPage() {
                   </li>
                 ))}
               </ul>
-              {currentTier === plan.tier ? (
+              {plan.tier === "enterprise" ? (
+                currentTier === "enterprise" ? null : (
+                  <Button variant="outline" className="w-full" asChild>
+                    <a href="mailto:hello@s3administrator.com">Contact Us</a>
+                  </Button>
+                )
+              ) : currentTier === plan.tier ? (
                 plan.tier !== "free" ? (
                   <Button
                     variant="outline"

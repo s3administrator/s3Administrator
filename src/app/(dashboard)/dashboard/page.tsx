@@ -21,6 +21,7 @@ function DashboardContent() {
 
   const bucket = searchParams.get("bucket") || ""
   const prefix = searchParams.get("prefix") || ""
+  const credentialId = searchParams.get("credentialId") || undefined
 
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
   const [searchQuery, setSearchQuery] = useState("")
@@ -37,11 +38,12 @@ function DashboardContent() {
   } | null>(null)
 
   const { data, isLoading } = useQuery({
-    queryKey: ["objects", bucket, prefix],
+    queryKey: ["objects", bucket, prefix, credentialId],
     queryFn: async () => {
       if (!bucket) return { folders: [], files: [] }
       const params = new URLSearchParams({ bucket })
       if (prefix) params.set("prefix", prefix)
+      if (credentialId) params.set("credentialId", credentialId)
       const res = await fetch(`/api/s3/objects?${params}`)
       if (!res.ok) throw new Error("Failed to load objects")
       return res.json() as Promise<{ folders: S3Object[]; files: S3Object[] }>
@@ -75,13 +77,14 @@ function DashboardContent() {
   })
 
   const refreshFiles = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ["objects", bucket, prefix] })
+    queryClient.invalidateQueries({ queryKey: ["objects", bucket, prefix, credentialId] })
     setSelectedKeys(new Set())
-  }, [queryClient, bucket, prefix])
+  }, [queryClient, bucket, prefix, credentialId])
 
   function handleNavigate(folderKey: string) {
     const params = new URLSearchParams({ bucket })
     if (folderKey) params.set("prefix", folderKey)
+    if (credentialId) params.set("credentialId", credentialId)
     router.push(`/dashboard?${params}`)
     setSelectedKeys(new Set())
   }
@@ -123,7 +126,7 @@ function DashboardContent() {
         const res = await fetch("/api/s3/download", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ bucket, key }),
+          body: JSON.stringify({ bucket, credentialId, key }),
         })
         const { url } = await res.json()
         window.open(url, "_blank")
@@ -135,7 +138,7 @@ function DashboardContent() {
 
   if (!bucket) {
     return (
-      <div className="flex h-full items-center justify-center">
+      <div className="flex h-full items-center justify-center p-8">
         <EmptyState type="no-buckets" />
       </div>
     )
@@ -150,13 +153,14 @@ function DashboardContent() {
       <Topbar
         bucket={bucket}
         prefix={prefix}
+        credentialId={credentialId}
         onSearch={setSearchQuery}
         onUpload={() => setUploadOpen(true)}
         onSync={() => {
           fetch("/api/s3/sync", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ bucket }),
+            body: JSON.stringify({ bucket, credentialId }),
           })
             .then((res) => res.json())
             .then((data) => {
@@ -185,21 +189,22 @@ function DashboardContent() {
         files={sortedItems}
         isLoading={isLoading}
         selectedKeys={selectedKeys}
-        onSelect={handleSelect}
+        onSelect={(file) => handleSelect(file.key)}
         onSelectAll={handleSelectAll}
-        onNavigate={handleNavigate}
-        onRename={handleRename}
-        onDelete={(key) => {
-          setSelectedKeys(new Set([key]))
+        onNavigate={(file) => handleNavigate(file.key)}
+        onRename={(file) => handleRename(file.key, file.isFolder)}
+        onDelete={(file) => {
+          setSelectedKeys(new Set([file.key]))
           setDeleteOpen(true)
         }}
-        onDownload={(key) => handleDownload([key])}
+        onDownload={(file) => handleDownload([file.key])}
       />
 
       <UploadDialog
         open={uploadOpen}
         onOpenChange={setUploadOpen}
         bucket={bucket}
+        credentialId={credentialId}
         prefix={prefix}
         onUploadComplete={refreshFiles}
       />
@@ -209,6 +214,7 @@ function DashboardContent() {
         onOpenChange={setDeleteOpen}
         items={selectedItems}
         bucket={bucket}
+        credentialId={credentialId}
         onDeleteComplete={refreshFiles}
       />
 
@@ -220,6 +226,7 @@ function DashboardContent() {
             if (!open) setRenameTarget(null)
           }}
           bucket={bucket}
+          credentialId={credentialId}
           currentKey={renameTarget.key}
           isFolder={renameTarget.isFolder}
           onRenameComplete={refreshFiles}
@@ -230,6 +237,7 @@ function DashboardContent() {
         open={newFolderOpen}
         onOpenChange={setNewFolderOpen}
         bucket={bucket}
+        credentialId={credentialId}
         prefix={prefix}
         onCreateComplete={refreshFiles}
       />

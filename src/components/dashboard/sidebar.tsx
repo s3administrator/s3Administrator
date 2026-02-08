@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { signOut, useSession } from "next-auth/react"
 import { toast } from "sonner"
@@ -10,12 +10,22 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Input } from "@/components/ui/input"
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+  DropdownMenuCheckboxItem,
+} from "@/components/ui/dropdown-menu"
 import {
   Database,
   Settings,
@@ -24,13 +34,29 @@ import {
   HardDrive,
   RefreshCw,
   Shield,
+  Search,
+  Filter,
+  ArrowUpDown,
+  FileSearch,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { ThemeSwitcher } from "@/components/theme-switcher"
 
 interface BucketStatsItem {
   name: string
   totalSize: number
   fileCount: number
+  credentialId: string
+}
+
+interface Bucket {
+  name: string
+  credentialId: string
+}
+
+interface Credential {
+  id: string
+  label: string
 }
 
 function formatSize(bytes: number): string {
@@ -46,31 +72,83 @@ export function Sidebar() {
   const queryClient = useQueryClient()
   const { data: session } = useSession()
   const [isSyncingAll, setIsSyncingAll] = useState(false)
+  const [bucketSearch, setBucketSearch] = useState("")
+  const [bucketSortField, setBucketSortField] = useState<"name" | "size" | "fileCount">("name")
+  const [bucketSortDir, setBucketSortDir] = useState<"asc" | "desc">("asc")
+  const [selectedCredentials, setSelectedCredentials] = useState<string[]>([])
   const isAdmin = session?.user?.role === "admin"
 
-  const { data: buckets, isLoading } = useQuery<{ name: string }[]>({
+  const { data: buckets = [], isLoading: bucketsLoading } = useQuery<Bucket[]>({
     queryKey: ["buckets"],
     queryFn: async () => {
-      const res = await fetch("/api/s3/buckets")
+      const res = await fetch("/api/s3/buckets?all=true")
       if (!res.ok) return []
       const data = await res.json()
       return data.buckets ?? []
     },
   })
 
-  const { data: bucketStats } = useQuery<BucketStatsItem[]>({
+  const { data: credentials = [] } = useQuery<Credential[]>({
+    queryKey: ["credentials"],
+    queryFn: async () => {
+      const res = await fetch("/api/s3/credentials")
+      if (!res.ok) return []
+      return res.json()
+    },
+  })
+
+  const { data: bucketStats = [] } = useQuery<BucketStatsItem[]>({
     queryKey: ["bucket-stats"],
     queryFn: async () => {
-      const res = await fetch("/api/s3/bucket-stats")
+      const res = await fetch("/api/s3/bucket-stats?all=true")
       if (!res.ok) return []
       const data = await res.json()
       return data.buckets ?? []
     },
   })
 
-  const statsByBucketName = new Map(
-    (bucketStats ?? []).map((bucketStat) => [bucketStat.name, bucketStat])
+  const statsByBucket = useMemo(
+    () =>
+      new Map(
+        bucketStats.map((stat) => [`${stat.credentialId}:${stat.name}`, stat])
+      ),
+    [bucketStats]
   )
+
+  // Filter and sort buckets
+  const filteredAndSortedBuckets = useMemo(() => {
+    let filtered = buckets
+
+    // Filter by search
+    if (bucketSearch) {
+      filtered = filtered.filter((b) =>
+        b.name.toLowerCase().includes(bucketSearch.toLowerCase())
+      )
+    }
+
+    // Filter by selected credentials
+    if (selectedCredentials.length > 0) {
+      filtered = filtered.filter((b) =>
+        selectedCredentials.includes(b.credentialId)
+      )
+    }
+
+    // Sort
+    return [...filtered].sort((a, b) => {
+      const statA = statsByBucket.get(`${a.credentialId}:${a.name}`)
+      const statB = statsByBucket.get(`${b.credentialId}:${b.name}`)
+
+      let cmp = 0
+      if (bucketSortField === "name") {
+        cmp = a.name.localeCompare(b.name)
+      } else if (bucketSortField === "size") {
+        cmp = (statA?.totalSize ?? 0) - (statB?.totalSize ?? 0)
+      } else {
+        cmp = (statA?.fileCount ?? 0) - (statB?.fileCount ?? 0)
+      }
+      return bucketSortDir === "desc" ? -cmp : cmp
+    })
+  }, [buckets, bucketSearch, selectedCredentials, bucketSortField, bucketSortDir, statsByBucket])
 
   async function handleSyncAll() {
     if (!buckets || buckets.length === 0 || isSyncingAll) return
@@ -82,7 +160,10 @@ export function Sidebar() {
         const res = await fetch("/api/s3/sync", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ bucket: bucket.name }),
+          body: JSON.stringify({
+            bucket: bucket.name,
+            credentialId: bucket.credentialId,
+          }),
         })
 
         const data = await res.json()
@@ -104,48 +185,145 @@ export function Sidebar() {
     }
   }
 
+  const toggleCredential = (credId: string) => {
+    setSelectedCredentials((prev) =>
+      prev.includes(credId) ? prev.filter((c) => c !== credId) : [...prev, credId]
+    )
+  }
+
   return (
     <TooltipProvider>
-      <div className="flex h-full w-56 flex-col border-r bg-muted/30">
-        <div className="flex h-14 items-center border-b px-4">
+      <div className="flex h-full w-96 flex-col border-r bg-muted/30">
+        <div className="flex h-14 items-center justify-between border-b px-4">
           <Link href="/dashboard" className="flex items-center gap-2 font-semibold">
             <Database className="h-5 w-5" />
             <span>S3 Admin</span>
           </Link>
+          <ThemeSwitcher />
         </div>
 
         <ScrollArea className="flex-1 px-3 py-3">
-          <div className="mb-2 flex items-center justify-between px-2">
-            <p className="text-xs font-medium text-muted-foreground">Buckets</p>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 gap-1 px-2 text-xs"
-              onClick={handleSyncAll}
-              disabled={isLoading || !buckets?.length || isSyncingAll}
-            >
-              <RefreshCw className={cn("h-3.5 w-3.5", isSyncingAll && "animate-spin")} />
-              Sync all
-            </Button>
+          <div className="mb-4 space-y-2">
+            <div className="flex items-center justify-between px-2">
+              <p className="text-xs font-medium text-muted-foreground">Buckets</p>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 gap-1 px-2 text-xs"
+                onClick={handleSyncAll}
+                disabled={bucketsLoading || !buckets?.length || isSyncingAll}
+              >
+                <RefreshCw className={cn("h-3.5 w-3.5", isSyncingAll && "animate-spin")} />
+                Sync all
+              </Button>
+            </div>
+
+            {/* Search input with Sort and Filter icons */}
+            <div className="flex items-center gap-1 px-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search buckets..."
+                  value={bucketSearch}
+                  onChange={(e) => setBucketSearch(e.target.value)}
+                  className="h-7 pl-9 text-xs"
+                />
+              </div>
+
+              {/* Sort icon */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                  >
+                    <ArrowUpDown className="h-3.5 w-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-36">
+                  <DropdownMenuLabel className="text-xs">Sort by</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => { setBucketSortField("name"); setBucketSortDir("asc") }}>
+                    Name ↑ {bucketSortField === "name" && bucketSortDir === "asc" && "✓"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => { setBucketSortField("name"); setBucketSortDir("desc") }}>
+                    Name ↓ {bucketSortField === "name" && bucketSortDir === "desc" && "✓"}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => { setBucketSortField("size"); setBucketSortDir("asc") }}>
+                    Size ↑ {bucketSortField === "size" && bucketSortDir === "asc" && "✓"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => { setBucketSortField("size"); setBucketSortDir("desc") }}>
+                    Size ↓ {bucketSortField === "size" && bucketSortDir === "desc" && "✓"}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => { setBucketSortField("fileCount"); setBucketSortDir("asc") }}>
+                    Files ↑ {bucketSortField === "fileCount" && bucketSortDir === "asc" && "✓"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => { setBucketSortField("fileCount"); setBucketSortDir("desc") }}>
+                    Files ↓ {bucketSortField === "fileCount" && bucketSortDir === "desc" && "✓"}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* Filter icon */}
+              <DropdownMenu modal={false}>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                  >
+                    <Filter className="h-3.5 w-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-48" onCloseAutoFocus={(e) => e.preventDefault()}>
+                  <DropdownMenuLabel className="text-xs">Credentials</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuCheckboxItem
+                    checked={selectedCredentials.length === 0}
+                    onCheckedChange={() => setSelectedCredentials([])}
+                    onSelect={(e) => e.preventDefault()}
+                  >
+                    All Credentials
+                  </DropdownMenuCheckboxItem>
+                  {credentials.length > 0 && <DropdownMenuSeparator />}
+                  {credentials.map((cred) => (
+                    <DropdownMenuCheckboxItem
+                      key={cred.id}
+                      checked={selectedCredentials.includes(cred.id)}
+                      onCheckedChange={() => toggleCredential(cred.id)}
+                      onSelect={(e) => e.preventDefault()}
+                    >
+                      {cred.label}
+                    </DropdownMenuCheckboxItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
-          {isLoading ? (
+
+          {/* Bucket list */}
+          {bucketsLoading ? (
             <div className="space-y-2">
               <Skeleton className="h-8 w-full" />
               <Skeleton className="h-8 w-full" />
               <Skeleton className="h-8 w-full" />
             </div>
-          ) : buckets && buckets.length > 0 ? (
+          ) : filteredAndSortedBuckets.length > 0 ? (
             <div className="space-y-1">
-              {buckets.map((bucket) => {
-                const href = `/dashboard?bucket=${encodeURIComponent(bucket.name)}`
+              {filteredAndSortedBuckets.map((bucket) => {
+                const href = `/dashboard?bucket=${encodeURIComponent(bucket.name)}&credentialId=${encodeURIComponent(bucket.credentialId)}`
                 const isActive =
                   pathname === "/dashboard" &&
-                  searchParams.get("bucket") === bucket.name
-                const bucketStat = statsByBucketName.get(bucket.name)
+                  searchParams.get("bucket") === bucket.name &&
+                  searchParams.get("credentialId") === bucket.credentialId
+                const bucketStat = statsByBucket.get(`${bucket.credentialId}:${bucket.name}`)
                 const totalSize = bucketStat?.totalSize ?? 0
                 const fileCount = bucketStat?.fileCount ?? 0
                 return (
-                  <Tooltip key={bucket.name}>
+                  <Tooltip key={`${bucket.credentialId}:${bucket.name}`}>
                     <TooltipTrigger asChild>
                       <Link
                         href={href}
@@ -155,9 +333,9 @@ export function Sidebar() {
                         )}
                       >
                         <HardDrive className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                        <div className="min-w-0">
-                          <p className="truncate text-sm">{bucket.name}</p>
-                          <p className="truncate text-xs text-muted-foreground">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm leading-tight break-words">{bucket.name}</p>
+                          <p className="text-xs text-muted-foreground">
                             {formatSize(totalSize)} · {fileCount}{" "}
                             {fileCount === 1 ? "file" : "files"}
                           </p>
@@ -171,13 +349,25 @@ export function Sidebar() {
             </div>
           ) : (
             <p className="px-2 text-sm text-muted-foreground">
-              No buckets found. Add your S3 credentials in Settings.
+              {bucketSearch || selectedCredentials.length > 0
+                ? "No buckets match your filters."
+                : "No buckets found. Add your S3 credentials in Settings."}
             </p>
           )}
         </ScrollArea>
 
         <Separator />
         <div className="space-y-1 p-3">
+          <Link
+            href="/dashboard/search"
+            className={cn(
+              "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent",
+              pathname === "/dashboard/search" && "bg-accent"
+            )}
+          >
+            <FileSearch className="h-4 w-4" />
+            Search All Files
+          </Link>
           {isAdmin && (
             <Link
               href="/admin"

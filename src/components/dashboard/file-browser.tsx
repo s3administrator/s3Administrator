@@ -19,20 +19,33 @@ import {
 import { Button } from "@/components/ui/button"
 import { FileIcon } from "@/components/dashboard/file-icon"
 import { EmptyState } from "@/components/dashboard/empty-state"
+import { cn } from "@/lib/utils"
 import { MoreHorizontal, Download, Pencil, Trash2 } from "lucide-react"
 import type { S3Object } from "@/types"
+
+type SortColumn = "name" | "size" | "lastModified"
 
 interface FileBrowserProps {
   prefix: string
   files: S3Object[]
   isLoading: boolean
   selectedKeys: Set<string>
-  onSelect: (key: string) => void
+  onSelect: (file: S3Object) => void
   onSelectAll: () => void
-  onNavigate: (folderKey: string) => void
-  onRename: (key: string, isFolder: boolean) => void
-  onDelete: (key: string, isFolder: boolean) => void
-  onDownload: (key: string) => void
+  onNavigate: (file: S3Object) => void
+  onRename: (file: S3Object) => void
+  onDelete: (file: S3Object) => void
+  onDownload: (file: S3Object) => void
+  getRowId?: (file: S3Object) => string
+  getNameLabel?: (file: S3Object) => string | undefined
+  pathHeader?: string
+  getPathLabel?: (file: S3Object) => string | undefined
+  compact?: boolean
+  locationHeader?: string
+  getLocationLabel?: (file: S3Object) => string | undefined
+  sortBy?: SortColumn
+  sortDir?: "asc" | "desc"
+  onSort?: (column: SortColumn) => void
 }
 
 function formatSize(bytes: number): string {
@@ -70,13 +83,43 @@ export function FileBrowser({
   onRename,
   onDelete,
   onDownload,
+  getRowId,
+  getNameLabel,
+  pathHeader,
+  getPathLabel,
+  compact = false,
+  locationHeader,
+  getLocationLabel,
+  sortBy,
+  sortDir,
+  onSort,
 }: FileBrowserProps) {
+  const resolveRowId = (file: S3Object) => getRowId?.(file) ?? file.key
+
+  const renderSortableHeader = (label: string, column: SortColumn) => {
+    const isActive = sortBy === column
+    const indicator = isActive ? (sortDir === "asc" ? "↑" : "↓") : "↕"
+
+    if (!onSort) return label
+
+    return (
+      <button
+        type="button"
+        className="inline-flex items-center gap-1 text-left hover:text-foreground"
+        onClick={() => onSort(column)}
+      >
+        <span>{label}</span>
+        <span className="text-xs text-muted-foreground">{indicator}</span>
+      </button>
+    )
+  }
+
   if (isLoading) {
     return (
       <div className="flex-1 p-4">
         <div className="space-y-2">
           {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} className="h-10 w-full" />
+            <Skeleton key={i} className={compact ? "h-8 w-full" : "h-10 w-full"} />
           ))}
         </div>
       </div>
@@ -98,50 +141,67 @@ export function FileBrowser({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-10">
+            <TableHead className={compact ? "w-8" : "w-10"}>
               <Checkbox
                 checked={allSelected}
                 onCheckedChange={onSelectAll}
               />
             </TableHead>
-            <TableHead>Name</TableHead>
-            <TableHead className="w-28">Size</TableHead>
-            <TableHead className="w-44">Modified</TableHead>
-            <TableHead className="w-10" />
+            <TableHead>{renderSortableHeader("Name", "name")}</TableHead>
+            {getPathLabel && (
+              <TableHead className={compact ? "w-64" : "w-80"}>
+                {pathHeader ?? "Path"}
+              </TableHead>
+            )}
+            {getLocationLabel && (
+              <TableHead className={compact ? "w-40" : "w-56"}>
+                {locationHeader ?? "Location"}
+              </TableHead>
+            )}
+            <TableHead className={compact ? "w-24" : "w-28"}>
+              {renderSortableHeader("Size", "size")}
+            </TableHead>
+            <TableHead className={compact ? "w-36" : "w-44"}>
+              {renderSortableHeader("Modified", "lastModified")}
+            </TableHead>
+            <TableHead className={compact ? "w-8" : "w-10"} />
           </TableRow>
         </TableHeader>
         <TableBody>
           {files.map((file) => {
-            const displayName = getDisplayName(file.key, prefix)
-            const isSelected = selectedKeys.has(file.key)
+            const rowId = resolveRowId(file)
+            const displayName = getNameLabel?.(file) ?? getDisplayName(file.key, prefix)
+            const pathLabel = getPathLabel?.(file)
+            const isSelected = selectedKeys.has(rowId)
+            const location = getLocationLabel?.(file)
 
             return (
               <TableRow
-                key={file.key}
+                key={rowId}
                 className={isSelected ? "bg-accent/50" : ""}
                 onDoubleClick={() => {
                   if (file.isFolder) {
-                    onNavigate(file.key)
+                    onNavigate(file)
                   } else {
-                    onDownload(file.key)
+                    onDownload(file)
                   }
                 }}
               >
                 <TableCell>
                   <Checkbox
                     checked={isSelected}
-                    onCheckedChange={() => onSelect(file.key)}
+                    onCheckedChange={() => onSelect(file)}
                   />
                 </TableCell>
-                <TableCell>
+                <TableCell className={compact ? "py-1.5" : undefined}>
                   <button
                     className="flex w-full min-w-0 items-center gap-2 text-left hover:underline"
                     onClick={() => {
-                      if (file.isFolder) onNavigate(file.key)
+                      if (file.isFolder) onNavigate(file)
                     }}
                   >
                     <FileIcon filename={displayName} isFolder={file.isFolder} />
-                    <span className="truncate">{displayName}</span>
+                    <span className={compact ? "truncate text-sm" : "truncate"}>{displayName}</span>
                     {file.isFolder && typeof file.fileCount === "number" && (
                       <span className="shrink-0 text-xs text-muted-foreground">
                         ({file.fileCount} {file.fileCount === 1 ? "file" : "files"})
@@ -149,39 +209,55 @@ export function FileBrowser({
                     )}
                   </button>
                 </TableCell>
-                <TableCell className="text-muted-foreground">
+                {getPathLabel && (
+                  <TableCell
+                    className={cn("max-w-0 truncate text-muted-foreground", compact && "py-1.5 text-xs")}
+                  >
+                    {pathLabel ?? "—"}
+                  </TableCell>
+                )}
+                {getLocationLabel && (
+                  <TableCell className={cn("max-w-0 truncate text-muted-foreground", compact && "py-1.5 text-xs")}>
+                    {location ?? "—"}
+                  </TableCell>
+                )}
+                <TableCell className={cn("text-muted-foreground", compact && "py-1.5 text-xs")}>
                   {file.isFolder
                     ? typeof file.totalSize === "number"
                       ? formatSize(file.totalSize)
                       : "—"
                     : formatSize(file.size)}
                 </TableCell>
-                <TableCell className="text-muted-foreground">
+                <TableCell className={cn("text-muted-foreground", compact && "py-1.5 text-xs")}>
                   {formatDate(file.lastModified)}
                 </TableCell>
-                <TableCell>
+                <TableCell className={compact ? "py-1.5" : undefined}>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className={compact ? "h-7 w-7 p-0" : "h-8 w-8 p-0"}
+                      >
                         <MoreHorizontal className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       {!file.isFolder && (
-                        <DropdownMenuItem onClick={() => onDownload(file.key)}>
+                        <DropdownMenuItem onClick={() => onDownload(file)}>
                           <Download className="mr-2 h-4 w-4" />
                           Download
                         </DropdownMenuItem>
                       )}
                       <DropdownMenuItem
-                        onClick={() => onRename(file.key, file.isFolder)}
+                        onClick={() => onRename(file)}
                       >
                         <Pencil className="mr-2 h-4 w-4" />
                         Rename
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         className="text-destructive"
-                        onClick={() => onDelete(file.key, file.isFolder)}
+                        onClick={() => onDelete(file)}
                       >
                         <Trash2 className="mr-2 h-4 w-4" />
                         Delete

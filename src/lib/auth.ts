@@ -32,31 +32,42 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
   )
 }
 
-if (process.env.RESEND_API_KEY) {
-  providers.push(
-    Resend({
-      apiKey: process.env.RESEND_API_KEY,
-      from: process.env.EMAIL_FROM || "noreply@localhost",
-      async sendVerificationRequest({ identifier: email, url }) {
-        const resend = getResendClient()
-        if (!resend) return
-        await resend.emails.send({
-          from: process.env.EMAIL_FROM || "noreply@localhost",
-          to: email,
-          subject: "Sign in to S3 Admin",
-          html: `
-            <div style="font-family: sans-serif; max-width: 400px; margin: 0 auto; padding: 20px;">
-              <h2 style="color: #111; margin-bottom: 24px;">Sign in to S3 Admin</h2>
-              <p style="color: #666; margin-bottom: 24px;">Click the link below to sign in to your account:</p>
-              <a href="${url}" style="display: inline-block; background: #111; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 6px;">Sign In</a>
-              <p style="color: #999; margin-top: 24px; font-size: 14px;">If you didn't request this email, you can safely ignore it.</p>
-            </div>
-          `,
-        })
-      },
-    })
-  )
-}
+// Always add Resend provider, but handle sending differently based on environment
+providers.push(
+  Resend({
+    apiKey: process.env.RESEND_API_KEY || "dummy-key-for-dev",
+    from: process.env.EMAIL_FROM || "noreply@localhost",
+    async sendVerificationRequest({ identifier: email, url }) {
+      const apiKey = process.env.RESEND_API_KEY
+
+      if (!apiKey || process.env.NODE_ENV === "development") {
+        // Log to console in development or when API key is missing
+        console.log("📧 Email Login Code (Dev Mode)")
+        console.log(`To: ${email}`)
+        console.log(`Sign in URL: ${url}`)
+        return
+      }
+
+      // Use Resend in production
+      const resend = getResendClient()
+      if (!resend) return
+
+      await resend.emails.send({
+        from: process.env.EMAIL_FROM || "noreply@localhost",
+        to: email,
+        subject: "Sign in to S3 Admin",
+        html: `
+          <div style="font-family: sans-serif; max-width: 400px; margin: 0 auto; padding: 20px;">
+            <h2 style="color: #111; margin-bottom: 24px;">Sign in to S3 Admin</h2>
+            <p style="color: #666; margin-bottom: 24px;">Click the link below to sign in to your account:</p>
+            <a href="${url}" style="display: inline-block; background: #111; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 6px;">Sign In</a>
+            <p style="color: #999; margin-top: 24px; font-size: 14px;">If you didn't request this email, you can safely ignore it.</p>
+          </div>
+        `,
+      })
+    },
+  })
+)
 
 const adminEmails = (process.env.ADMIN_EMAILS ?? "")
   .split(",")

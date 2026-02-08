@@ -8,6 +8,9 @@ interface MultiSelectToolbarProps {
   onDelete: () => void
   onDownload: () => void
   onClear: () => void
+  selectionHint?: string
+  selectAllLabel?: string
+  onSelectAllAcrossResults?: () => void
 }
 
 export function MultiSelectToolbar({
@@ -15,16 +18,29 @@ export function MultiSelectToolbar({
   onDelete,
   onDownload,
   onClear,
+  selectionHint,
+  selectAllLabel,
+  onSelectAllAcrossResults,
 }: MultiSelectToolbarProps) {
   if (selectedCount === 0) return null
 
   return (
     <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b bg-muted/80 px-4 py-2 backdrop-blur-sm">
       <div className="flex items-center gap-3">
-        <span className="text-sm font-medium">
-          {selectedCount} {selectedCount === 1 ? "item" : "items"} selected
-        </span>
+        <div className="flex flex-col">
+          <span className="text-sm font-medium">
+            {selectedCount} {selectedCount === 1 ? "item" : "items"} selected
+          </span>
+          {selectionHint ? (
+            <span className="text-xs text-muted-foreground">{selectionHint}</span>
+          ) : null}
+        </div>
         <div className="flex items-center gap-1">
+          {onSelectAllAcrossResults && selectAllLabel ? (
+            <Button variant="secondary" size="sm" onClick={onSelectAllAcrossResults}>
+              {selectAllLabel}
+            </Button>
+          ) : null}
           <Button variant="outline" size="sm" onClick={onDownload}>
             <Download className="mr-1.5 h-4 w-4" />
             Download
