@@ -10,7 +10,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -155,7 +154,9 @@ export default function AdminUsersPage() {
                     <TableCell>{user._count.s3Credentials}</TableCell>
                     <TableCell>{user._count.fileMetadata}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">
-                      {new Date(user.createdAt).toLocaleDateString("en-US")}
+                      {new Date(user.createdAt).toLocaleDateString("en-US", {
+                        timeZone: "UTC",
+                      })}
                     </TableCell>
                   </TableRow>
                 ))}

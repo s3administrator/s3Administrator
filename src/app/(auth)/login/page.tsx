@@ -49,7 +49,7 @@ export default function LoginPage() {
       <CardHeader className="text-center">
         <CardTitle className="text-2xl">Sign in</CardTitle>
         <CardDescription>
-          Sign in to manage your Hetzner S3 storage
+          Sign in to manage your S3 storage
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

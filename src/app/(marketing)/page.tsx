@@ -20,7 +20,7 @@ export default function LandingPage() {
             </div>
 
             <h1 className="text-5xl sm:text-6xl font-bold tracking-tight">
-              Manage Hetzner S3
+              Manage your S3
               <br />
               <span className="bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
                 like a file manager
@@ -28,7 +28,7 @@ export default function LandingPage() {
             </h1>
 
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-              Hetzner's console is missing basic features. Delete folders recursively, bulk operations, search, sort—all the conveniences you expect from a desktop file manager.
+              S3 consoles are missing basic features. Delete folders recursively, bulk operations, search, sort—all the conveniences you expect from a desktop file manager. Works with AWS, Hetzner, Cloudflare R2, and any S3-compatible provider.
             </p>
           </div>
 
@@ -38,7 +38,7 @@ export default function LandingPage() {
               <Link href="/login">Get Started Free</Link>
             </Button>
             <Button size="lg" variant="outline" asChild className="text-base h-12">
-              <a href="https://github.com/yourusername/hetzner-s3-manager" target="_blank" rel="noopener noreferrer">
+              <a href="https://github.com/yourusername/s3-admin" target="_blank" rel="noopener noreferrer">
                 <Github className="mr-2 h-5 w-5" />
                 View on GitHub
               </a>
@@ -141,7 +141,7 @@ export default function LandingPage() {
 
       {/* Footer CTA */}
       <section className="border-t px-4 py-12 text-center space-y-4">
-        <p className="text-muted-foreground">Ready to stop fighting with Hetzner's console?</p>
+        <p className="text-muted-foreground">Ready to stop fighting with clunky S3 consoles?</p>
         <Button size="lg" asChild>
           <Link href="/login">Get Started Now</Link>
         </Button>

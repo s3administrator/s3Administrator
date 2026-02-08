@@ -43,10 +43,10 @@ if (process.env.RESEND_API_KEY) {
         await resend.emails.send({
           from: process.env.EMAIL_FROM || "noreply@localhost",
           to: email,
-          subject: "Sign in to Hetzner S3 Manager",
+          subject: "Sign in to S3 Admin",
           html: `
             <div style="font-family: sans-serif; max-width: 400px; margin: 0 auto; padding: 20px;">
-              <h2 style="color: #111; margin-bottom: 24px;">Sign in to Hetzner S3 Manager</h2>
+              <h2 style="color: #111; margin-bottom: 24px;">Sign in to S3 Admin</h2>
               <p style="color: #666; margin-bottom: 24px;">Click the link below to sign in to your account:</p>
               <a href="${url}" style="display: inline-block; background: #111; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 6px;">Sign In</a>
               <p style="color: #999; margin-top: 24px; font-size: 14px;">If you didn't request this email, you can safely ignore it.</p>

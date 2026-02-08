@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: "Hetzner S3 Manager",
-  description: "Manage your Hetzner Object Storage with ease",
+  title: "S3 Admin",
+  description: "Manage your S3 storage across any provider with ease",
 }
 
 export default function RootLayout({

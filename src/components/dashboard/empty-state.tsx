@@ -15,13 +15,13 @@ const CONFIG = {
     icon: HardDrive,
     title: "No buckets found",
     description:
-      "No S3 buckets were found for the current credentials. Create a bucket in your Hetzner console or check your credentials in Settings.",
+      "No S3 buckets were found for the current credentials. Create a bucket in your provider's console or check your credentials in Settings.",
   },
   "no-credentials": {
     icon: KeyRound,
     title: "No credentials configured",
     description:
-      "Add your Hetzner S3 credentials in Settings to start managing your storage.",
+      "Add your S3 credentials in Settings to start managing your storage.",
   },
 } as const
 

@@ -15,6 +15,7 @@ export async function GET() {
     select: {
       id: true,
       label: true,
+      provider: true,
       endpoint: true,
       region: true,
       isDefault: true,
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 })
   }
 
-  const { label, endpoint, region, accessKey, secretKey } = parsed.data
+  const { label, provider, endpoint, region, accessKey, secretKey } = parsed.data
 
   const encAccessKey = encrypt(accessKey)
   const encSecretKey = encrypt(secretKey)
@@ -51,6 +52,7 @@ export async function POST(req: NextRequest) {
     data: {
       userId: session.user.id,
       label,
+      provider,
       endpoint,
       region,
       accessKeyEnc: encAccessKey.ciphertext,

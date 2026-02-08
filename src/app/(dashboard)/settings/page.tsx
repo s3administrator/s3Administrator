@@ -19,30 +19,35 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 import { Plus, Trash2, Check, Loader2, Star } from "lucide-react"
+import { PROVIDERS, Provider, getProviderConfig } from "@/lib/providers"
 
 interface Credential {
   id: string
   label: string
+  provider: string
   endpoint: string
   region: string
   isDefault: boolean
   createdAt: string
 }
 
-const HETZNER_REGIONS = [
-  { label: "Falkenstein (fsn1)", endpoint: "https://fsn1.your-objectstorage.com", region: "fsn1" },
-  { label: "Nuremberg (nbg1)", endpoint: "https://nbg1.your-objectstorage.com", region: "nbg1" },
-  { label: "Helsinki (hel1)", endpoint: "https://hel1.your-objectstorage.com", region: "hel1" },
-]
-
 export default function SettingsPage() {
   const queryClient = useQueryClient()
   const [addOpen, setAddOpen] = useState(false)
+  const [selectedProvider, setSelectedProvider] = useState<Provider>("HETZNER")
   const [form, setForm] = useState({
     label: "",
+    provider: "HETZNER" as Provider,
     endpoint: "",
     region: "",
     accessKey: "",
@@ -73,7 +78,8 @@ export default function SettingsPage() {
       queryClient.invalidateQueries({ queryKey: ["credentials"] })
       queryClient.invalidateQueries({ queryKey: ["buckets"] })
       setAddOpen(false)
-      setForm({ label: "", endpoint: "", region: "", accessKey: "", secretKey: "" })
+      setSelectedProvider("HETZNER")
+      setForm({ label: "", provider: "HETZNER", endpoint: "", region: "", accessKey: "", secretKey: "" })
       toast.success("Credentials saved")
     },
     onError: () => toast.error("Failed to save credentials"),
@@ -124,16 +130,34 @@ export default function SettingsPage() {
     setTesting(null)
   }
 
-  function selectRegion(idx: number) {
-    const region = HETZNER_REGIONS[idx]
-    if (region) {
-      setForm((f) => ({
-        ...f,
-        endpoint: region.endpoint,
-        region: region.region,
-        label: f.label || region.label,
-      }))
+  function handleProviderChange(provider: Provider) {
+    setSelectedProvider(provider)
+    const config = getProviderConfig(provider)
+    setForm((f) => ({
+      ...f,
+      provider,
+      region: config.defaultRegion,
+      endpoint: "",
+    }))
+  }
+
+  function selectRegion(region: string) {
+    const config = getProviderConfig(selectedProvider)
+    let endpoint = config.endpoint
+
+    if (selectedProvider === "CLOUDFLARE_R2") {
+      endpoint = "{accountId}.r2.cloudflarestorage.com"
+    } else if (selectedProvider === "AWS") {
+      endpoint = endpoint.replace("{region}", region)
+    } else if (selectedProvider === "HETZNER") {
+      endpoint = endpoint.replace("{region}", region)
     }
+
+    setForm((f) => ({
+      ...f,
+      endpoint,
+      region,
+    }))
   }
 
   return (
@@ -152,7 +176,7 @@ export default function SettingsPage() {
               Add Credential
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Add S3 Credential</DialogTitle>
             </DialogHeader>
@@ -164,21 +188,46 @@ export default function SettingsPage() {
               className="space-y-4"
             >
               <div className="space-y-2">
-                <Label>Quick Select Region</Label>
-                <div className="flex gap-2">
-                  {HETZNER_REGIONS.map((r, i) => (
-                    <Button
-                      key={r.region}
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => selectRegion(i)}
-                    >
-                      {r.region}
-                    </Button>
-                  ))}
-                </div>
+                <Label htmlFor="provider">Provider</Label>
+                <Select
+                  value={selectedProvider}
+                  onValueChange={(value) => handleProviderChange(value as Provider)}
+                >
+                  <SelectTrigger id="provider">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(PROVIDERS) as Provider[]).map((provider) => (
+                      <SelectItem key={provider} value={provider}>
+                        {PROVIDERS[provider].name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {PROVIDERS[selectedProvider].helpText}
+                </p>
               </div>
+
+              {PROVIDERS[selectedProvider].regions.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Region</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {PROVIDERS[selectedProvider].regions.map((region) => (
+                      <Button
+                        key={region}
+                        type="button"
+                        variant={form.region === region ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => selectRegion(region)}
+                      >
+                        {region}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label htmlFor="label">Label</Label>
                 <Input
@@ -187,7 +236,7 @@ export default function SettingsPage() {
                   onChange={(e) =>
                     setForm((f) => ({ ...f, label: e.target.value }))
                   }
-                  placeholder="My Hetzner Storage"
+                  placeholder="My S3 Storage"
                   required
                 />
               </div>
@@ -199,7 +248,7 @@ export default function SettingsPage() {
                   onChange={(e) =>
                     setForm((f) => ({ ...f, endpoint: e.target.value }))
                   }
-                  placeholder="https://fsn1.your-objectstorage.com"
+                  placeholder={PROVIDERS[selectedProvider].endpoint || "https://example.com"}
                   required
                 />
               </div>
@@ -211,7 +260,7 @@ export default function SettingsPage() {
                   onChange={(e) =>
                     setForm((f) => ({ ...f, region: e.target.value }))
                   }
-                  placeholder="fsn1"
+                  placeholder={PROVIDERS[selectedProvider].defaultRegion}
                   required
                 />
               </div>
@@ -271,6 +320,7 @@ export default function SettingsPage() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <CardTitle className="text-base">{cred.label}</CardTitle>
+                    <Badge variant="outline">{PROVIDERS[cred.provider as Provider]?.name || cred.provider}</Badge>
                     {cred.isDefault && <Badge variant="secondary">Default</Badge>}
                   </div>
                   <div className="flex items-center gap-1">

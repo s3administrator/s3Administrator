@@ -68,6 +68,7 @@ model S3Credential {
   id           String  @id @default(cuid())
   userId       String
   label        String
+  provider     String  @default("HETZNER")
   endpoint     String
   region       String
   accessKeyEnc String  @db.Text

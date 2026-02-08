@@ -2,7 +2,8 @@ import { z } from "zod/v4"
 
 export const addCredentialSchema = z.object({
   label: z.string().min(1).max(100),
-  endpoint: z.url(),
+  provider: z.enum(['AWS', 'HETZNER', 'CLOUDFLARE_R2', 'GENERIC']),
+  endpoint: z.string().min(1),
   region: z.string().min(1).max(50),
   accessKey: z.string().min(1),
   secretKey: z.string().min(1),

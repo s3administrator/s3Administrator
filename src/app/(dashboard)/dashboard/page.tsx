@@ -181,7 +181,6 @@ function DashboardContent() {
       )}
 
       <FileBrowser
-        bucket={bucket}
         prefix={prefix}
         files={sortedItems}
         isLoading={isLoading}
@@ -190,7 +189,7 @@ function DashboardContent() {
         onSelectAll={handleSelectAll}
         onNavigate={handleNavigate}
         onRename={handleRename}
-        onDelete={(key, isFolder) => {
+        onDelete={(key) => {
           setSelectedKeys(new Set([key]))
           setDeleteOpen(true)
         }}

@@ -23,7 +23,6 @@ import { MoreHorizontal, Download, Pencil, Trash2 } from "lucide-react"
 import type { S3Object } from "@/types"
 
 interface FileBrowserProps {
-  bucket: string
   prefix: string
   files: S3Object[]
   isLoading: boolean
@@ -51,6 +50,7 @@ function formatDate(dateStr: string): string {
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: "UTC",
   })
 }
 
@@ -60,7 +60,6 @@ function getDisplayName(key: string, prefix: string): string {
 }
 
 export function FileBrowser({
-  bucket,
   prefix,
   files,
   isLoading,
@@ -136,17 +135,26 @@ export function FileBrowser({
                 </TableCell>
                 <TableCell>
                   <button
-                    className="flex items-center gap-2 text-left hover:underline"
+                    className="flex w-full min-w-0 items-center gap-2 text-left hover:underline"
                     onClick={() => {
                       if (file.isFolder) onNavigate(file.key)
                     }}
                   >
                     <FileIcon filename={displayName} isFolder={file.isFolder} />
                     <span className="truncate">{displayName}</span>
+                    {file.isFolder && typeof file.fileCount === "number" && (
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        ({file.fileCount} {file.fileCount === 1 ? "file" : "files"})
+                      </span>
+                    )}
                   </button>
                 </TableCell>
                 <TableCell className="text-muted-foreground">
-                  {file.isFolder ? "—" : formatSize(file.size)}
+                  {file.isFolder
+                    ? typeof file.totalSize === "number"
+                      ? formatSize(file.totalSize)
+                      : "—"
+                    : formatSize(file.size)}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {formatDate(file.lastModified)}

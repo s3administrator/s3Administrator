@@ -9,10 +9,23 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const defaultCredential = await prisma.s3Credential.findFirst({
+      where: {
+        userId: session.user.id,
+        isDefault: true,
+      },
+      select: { id: true },
+    })
+
+    if (!defaultCredential) {
+      return NextResponse.json({ buckets: [] })
+    }
+
     const stats = await prisma.fileMetadata.groupBy({
       by: ["bucket"],
       where: {
         userId: session.user.id,
+        credentialId: defaultCredential.id,
         isFolder: false,
       },
       _sum: { size: true },
