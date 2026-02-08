@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { getS3Client } from "@/lib/s3"
 import { prisma } from "@/lib/db"
+import { getObjectExtension, rebuildUserExtensionStats } from "@/lib/file-stats"
 import { getTierLimits } from "@/lib/tiers"
 import { ListObjectsV2Command } from "@aws-sdk/client-s3"
 
@@ -44,7 +45,13 @@ export async function POST(request: NextRequest) {
     const availableSlots = Math.max(0, tierLimits.files - otherBucketCount)
 
     // Paginate through all objects in the bucket
-    const s3Objects: { key: string; size: number; lastModified: Date; isFolder: boolean }[] = []
+    const s3Objects: {
+      key: string
+      extension: string
+      size: number
+      lastModified: Date
+      isFolder: boolean
+    }[] = []
     let continuationToken: string | undefined
 
     do {
@@ -60,6 +67,10 @@ export async function POST(request: NextRequest) {
 
         s3Objects.push({
           key: obj.Key,
+          extension: getObjectExtension(
+            obj.Key,
+            obj.Key.endsWith("/") && (obj.Size ?? 0) === 0
+          ),
           size: obj.Size ?? 0,
           lastModified: obj.LastModified ?? new Date(),
           isFolder: obj.Key.endsWith("/") && (obj.Size ?? 0) === 0,
@@ -92,11 +103,13 @@ export async function POST(request: NextRequest) {
           credentialId: credential.id,
           bucket,
           key: obj.key,
+          extension: obj.extension,
           size: BigInt(obj.size),
           lastModified: obj.lastModified,
           isFolder: obj.isFolder,
         },
         update: {
+          extension: obj.extension,
           size: BigInt(obj.size),
           lastModified: obj.lastModified,
           isFolder: obj.isFolder,
@@ -125,6 +138,8 @@ export async function POST(request: NextRequest) {
         where: { id: { in: staleIds } },
       })
     }
+
+    await rebuildUserExtensionStats(session.user.id)
 
     return NextResponse.json({ synced, total: totalInS3 })
   } catch (error) {

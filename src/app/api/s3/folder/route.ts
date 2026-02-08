@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { getS3Client } from "@/lib/s3"
 import { prisma } from "@/lib/db"
+import { rebuildUserExtensionStats } from "@/lib/file-stats"
 import { createFolderSchema } from "@/lib/validations"
 import { PutObjectCommand } from "@aws-sdk/client-s3"
 
@@ -50,14 +51,18 @@ export async function POST(request: NextRequest) {
         credentialId: credential.id,
         bucket,
         key: folderKey,
+        extension: "",
         size: BigInt(0),
         lastModified: new Date(),
         isFolder: true,
       },
       update: {
+        extension: "",
         lastModified: new Date(),
       },
     })
+
+    await rebuildUserExtensionStats(session.user.id)
 
     return NextResponse.json({ key: folderKey })
   } catch (error) {

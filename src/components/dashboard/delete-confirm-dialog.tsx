@@ -55,22 +55,17 @@ export function DeleteConfirmDialog({
     [preview]
   )
 
-  const buildBody = (dryRun = false) => {
+  const baseDeleteBody = useMemo(() => {
     const body: {
       bucket: string
       credentialId?: string
       keys?: string[]
       prefixes?: string[]
-      dryRun?: boolean
-    } = {
-      bucket,
-      dryRun,
-    }
+    } = { bucket }
 
     if (credentialId) {
       body.credentialId = credentialId
     }
-
     if (files.length > 0) {
       body.keys = files.map((f) => f.key)
     }
@@ -79,7 +74,7 @@ export function DeleteConfirmDialog({
     }
 
     return body
-  }
+  }, [bucket, credentialId, files, folders])
 
   useEffect(() => {
     if (!open || items.length === 0) {
@@ -97,7 +92,10 @@ export function DeleteConfirmDialog({
         const res = await fetch("/api/s3/delete", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(buildBody(true)),
+          body: JSON.stringify({
+            ...baseDeleteBody,
+            dryRun: true,
+          }),
         })
 
         if (!res.ok) {
@@ -125,7 +123,7 @@ export function DeleteConfirmDialog({
     return () => {
       cancelled = true
     }
-  }, [open, items, bucket, credentialId, files, folders])
+  }, [open, items, baseDeleteBody])
 
   async function handleDelete() {
     setIsDeleting(true)
@@ -133,7 +131,7 @@ export function DeleteConfirmDialog({
       const res = await fetch("/api/s3/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildBody(false)),
+        body: JSON.stringify(baseDeleteBody),
       })
 
       if (!res.ok) throw new Error("Delete failed")

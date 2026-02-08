@@ -23,6 +23,8 @@ model User {
   sessions      Session[]
   s3Credentials S3Credential[]
   fileMetadata  FileMetadata[]
+  fileExtensionStats UserFileExtensionStat[]
+  backgroundTasks BackgroundTask[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -92,6 +94,7 @@ model FileMetadata {
   credentialId String
   bucket       String
   key          String
+  extension    String   @default("")
   size         BigInt
   lastModified DateTime
   isFolder     Boolean  @default(false)
@@ -102,4 +105,43 @@ model FileMetadata {
   @@unique([credentialId, bucket, key])
   @@index([userId])
   @@index([credentialId, bucket])
+  @@index([userId, extension])
+}
+
+model UserFileExtensionStat {
+  id        String   @id @default(cuid())
+  userId    String
+  extension String
+  fileCount Int      @default(0)
+  totalSize BigInt   @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, extension])
+  @@index([userId])
+}
+
+model BackgroundTask {
+  id          String   @id @default(cuid())
+  userId      String
+  type        String
+  title       String
+  status      String   @default("pending")
+  payload     Json
+  progress    Json?
+  attempts    Int      @default(0)
+  maxAttempts Int      @default(5)
+  lastError   String?
+  nextRunAt   DateTime @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, nextRunAt])
+  @@index([createdAt])
 }

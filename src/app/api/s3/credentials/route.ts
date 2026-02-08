@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/db"
+import { rebuildUserExtensionStats } from "@/lib/file-stats"
 import { encrypt } from "@/lib/crypto"
 import { addCredentialSchema } from "@/lib/validations"
 
@@ -80,6 +81,8 @@ export async function DELETE(req: NextRequest) {
   await prisma.s3Credential.deleteMany({
     where: { id, userId: session.user.id },
   })
+
+  await rebuildUserExtensionStats(session.user.id)
 
   return NextResponse.json({ deleted: true })
 }

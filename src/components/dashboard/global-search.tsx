@@ -291,50 +291,6 @@ export function GlobalSearch() {
     }
   }
 
-  const deleteItemsAcrossContexts = async (targets: SearchItem[]) => {
-    const groups = new Map<string, { bucket: string; credentialId: string; keys: string[] }>()
-
-    for (const item of targets) {
-      const key = `${item.credentialId}::${item.bucket}`
-      const existing = groups.get(key)
-      if (existing) {
-        existing.keys.push(item.key)
-      } else {
-        groups.set(key, {
-          bucket: item.bucket,
-          credentialId: item.credentialId,
-          keys: [item.key],
-        })
-      }
-    }
-
-    let deletedTotal = 0
-
-    for (const group of groups.values()) {
-      for (let i = 0; i < group.keys.length; i += 1000) {
-        const keys = group.keys.slice(i, i + 1000)
-        const res = await fetch("/api/s3/delete", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            bucket: group.bucket,
-            credentialId: group.credentialId,
-            keys,
-          }),
-        })
-
-        if (!res.ok) {
-          throw new Error("Delete failed")
-        }
-
-        const data = await res.json()
-        deletedTotal += Number(data.deleted ?? 0)
-      }
-    }
-
-    return deletedTotal
-  }
-
   const handleBulkDownload = async () => {
     try {
       setIsBulkRunning(true)
@@ -377,20 +333,32 @@ export function GlobalSearch() {
   const handleBulkDelete = async () => {
     if (allMatchingSelected) {
       const confirmed = window.confirm(
-        `Delete all ${totalResults} matching indexed files? This cannot be undone.`
+        `Start a background task to delete all ${totalResults} matching indexed files?`
       )
       if (!confirmed) return
 
       try {
-        setIsBulkRunning(true)
-        const targets = await fetchAllMatchingItems()
-        const deleted = await deleteItemsAcrossContexts(targets)
-        toast.success(`Deleted ${deleted} item(s)`)
-        resetResultsState()
+        const res = await fetch("/api/tasks/bulk-delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            query: queryValue,
+            selectedType,
+            selectedCredentialIds,
+            selectedBucketScopes,
+          }),
+        })
+
+        const data = await res.json()
+        if (!res.ok) {
+          throw new Error(data?.error ?? "Failed to create task")
+        }
+
+        queryClient.invalidateQueries({ queryKey: ["background-tasks"] })
+        toast.success("Bulk delete task started")
+        resetSelection()
       } catch {
-        toast.error("Failed to delete selected files")
-      } finally {
-        setIsBulkRunning(false)
+        toast.error("Failed to create bulk delete task")
       }
       return
     }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { getS3Client } from "@/lib/s3"
 import { prisma } from "@/lib/db"
+import { rebuildUserExtensionStats } from "@/lib/file-stats"
 import { deleteObjectsSchema } from "@/lib/validations"
 import type { Prisma } from "@prisma/client"
 import {
@@ -232,6 +233,8 @@ export async function POST(request: NextRequest) {
         })
       }
     }
+
+    await rebuildUserExtensionStats(session.user.id)
 
     return NextResponse.json({ deleted: totalDeleted })
   } catch (error) {

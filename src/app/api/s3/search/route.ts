@@ -1,54 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/db"
-import type { Prisma } from "@prisma/client"
-
-const FILE_TYPE_EXTENSIONS: Record<string, string[]> = {
-  image: ["jpg", "jpeg", "png", "gif", "webp", "svg", "ico"],
-  video: ["mp4", "avi", "mov", "mkv", "flv", "wmv", "webm"],
-  audio: ["mp3", "wav", "flac", "aac", "m4a", "ogg", "wma"],
-  document: ["pdf", "doc", "docx", "txt", "rtf", "odt", "xls", "xlsx"],
-  archive: ["zip", "rar", "7z", "tar", "gz", "bz2"],
-  code: ["js", "ts", "tsx", "jsx", "py", "java", "cpp", "c", "go", "rs", "rb", "php", "html", "css", "json", "xml"],
-  other: [],
-}
-
-function buildTypeFilter(type: string): Prisma.FileMetadataWhereInput | null {
-  if (!type || type === "all") return null
-
-  const extensionFilters = (extensions: string[]): Prisma.FileMetadataWhereInput[] =>
-    extensions.map((extension) => ({
-      key: {
-        endsWith: `.${extension}`,
-        mode: "insensitive",
-      },
-    }))
-
-  if (type === "other") {
-    const knownExtensions = Array.from(
-      new Set(
-        Object.entries(FILE_TYPE_EXTENSIONS)
-          .filter(([fileType]) => fileType !== "other")
-          .flatMap(([, extensions]) => extensions)
-      )
-    )
-
-    if (knownExtensions.length === 0) return null
-
-    return {
-      NOT: {
-        OR: extensionFilters(knownExtensions),
-      },
-    }
-  }
-
-  const extensions = FILE_TYPE_EXTENSIONS[type] ?? []
-  if (extensions.length === 0) return null
-
-  return {
-    OR: extensionFilters(extensions),
-  }
-}
+import {
+  buildFileSearchWhereClause,
+  parseCsvValues,
+  parseScopes,
+} from "@/lib/file-search"
 
 export async function GET(request: NextRequest) {
   try {
@@ -74,58 +31,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ results: [], total: 0 })
     }
 
-    // Parse bucket filter
-    const buckets = bucketsParam ? bucketsParam.split(",").map((b) => b.trim()) : []
-    const credentialIds = credentialIdsParam
-      ? credentialIdsParam.split(",").map((id) => id.trim()).filter(Boolean)
-      : []
-    const scopedFilters = scopeParams
-      .map((scope) => {
-        const [credentialId, bucket] = scope.split("::")
-        if (!credentialId || !bucket) return null
-        return { credentialId, bucket }
-      })
-      .filter((value): value is { credentialId: string; bucket: string } => Boolean(value))
+    const buckets = parseCsvValues(bucketsParam)
+    const credentialIds = parseCsvValues(credentialIdsParam)
+    const scopes = parseScopes(scopeParams)
 
-    // Build where clause
-    const whereClause: Prisma.FileMetadataWhereInput = {
+    const whereClause = buildFileSearchWhereClause({
       userId: session.user.id,
-      isFolder: false,
-    }
-
-    // Text search
-    whereClause.key = {
-      contains: query,
-      mode: "insensitive",
-    }
-
-    if (scopedFilters.length > 0) {
-      whereClause.OR = scopedFilters
-    } else {
-      if (buckets.length > 0) {
-        whereClause.bucket = {
-          in: buckets,
-        }
-      }
-
-      if (credentialIds.length > 0) {
-        whereClause.credentialId = {
-          in: credentialIds,
-        }
-      }
-    }
-
-    const typeFilter = buildTypeFilter(type)
-    if (typeFilter) {
-      const existingAnd = whereClause.AND
-      if (Array.isArray(existingAnd)) {
-        whereClause.AND = [...existingAnd, typeFilter]
-      } else if (existingAnd) {
-        whereClause.AND = [existingAnd, typeFilter]
-      } else {
-        whereClause.AND = [typeFilter]
-      }
-    }
+      query,
+      buckets,
+      credentialIds,
+      scopes,
+      type,
+    })
 
     const total = await prisma.fileMetadata.count({ where: whereClause })
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { getS3Client } from "@/lib/s3"
 import { prisma } from "@/lib/db"
+import { getObjectExtension, rebuildUserExtensionStats } from "@/lib/file-stats"
 import { moveObjectSchema } from "@/lib/validations"
 import {
   CopyObjectCommand,
@@ -82,6 +83,7 @@ export async function POST(request: NextRequest) {
               data: {
                 bucket,
                 key: newKey,
+                extension: getObjectExtension(newKey, newKey.endsWith("/")),
               },
             })
 
@@ -120,12 +122,15 @@ export async function POST(request: NextRequest) {
           data: {
             bucket,
             key: to,
+            extension: getObjectExtension(to, to.endsWith("/")),
           },
         })
 
         movedCount++
       }
     }
+
+    await rebuildUserExtensionStats(session.user.id)
 
     return NextResponse.json({ moved: movedCount })
   } catch (error) {
