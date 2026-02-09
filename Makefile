@@ -1,4 +1,4 @@
-.PHONY: setup prod-run dev-run stop reset-dev
+.PHONY: setup prod-run dev-run stop reset-dev migrate
 
 DC = docker compose --env-file .env -f docker/docker-compose.yml
 
@@ -27,6 +27,15 @@ dev-run: ## Start DB + local dev server
 	$(DC) up db -d
 	@until $(DC) exec -T db pg_isready -U s3admin -d s3_admin -q 2>/dev/null; do sleep 1; done
 	npm run dev
+
+# ─── Database ────────────────────────────────────────────
+
+migrate: ## Run migrations & seed via tools container
+	$(DC) up db -d
+	@until $(DC) exec -T db pg_isready -U s3admin -d s3_admin -q 2>/dev/null; do sleep 1; done
+	$(DC) run --rm -T tools npx --no-install prisma migrate deploy
+	$(DC) run --rm -T tools npx --no-install prisma db seed
+	@echo "✓ Migrations applied & seeded."
 
 # ─── Stop & Reset ────────────────────────────────────────
 
