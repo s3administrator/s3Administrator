@@ -6,6 +6,7 @@ import { getObjectExtension, rebuildUserExtensionStats } from "@/lib/file-stats"
 import { moveObjectSchema } from "@/lib/validations"
 import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
 import { getRequestContext, logUserAuditAction } from "@/lib/audit-logger"
+import { moveMediaThumbnailForObject } from "@/lib/media-thumbnails"
 import {
   CopyObjectCommand,
   DeleteObjectCommand,
@@ -25,6 +26,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
     userId = session.user.id
+    const limitResult = rateLimitByUser(session.user.id, "s3-move", 30, 60_000)
+    if (!limitResult.success) {
+      return rateLimitResponse(limitResult.retryAfterSeconds)
+    }
 
     const body = await request.json()
     const parsed = moveObjectSchema.safeParse(body)
@@ -44,6 +49,8 @@ export async function POST(request: NextRequest) {
     const { client, credential } = await getS3Client(session.user.id, credentialId)
 
     let movedCount = 0
+    let thumbnailMoved = 0
+    let thumbnailQueued = 0
 
     for (const { from, to } of operations) {
       const isFolder = from.endsWith("/")
@@ -99,6 +106,21 @@ export async function POST(request: NextRequest) {
               },
             })
 
+            if (!(newKey.endsWith("/") && (obj.Size ?? 0) === 0)) {
+              const thumbnailResult = await moveMediaThumbnailForObject({
+                userId: session.user.id,
+                credentialId: credential.id,
+                fromBucket,
+                fromKey: obj.Key,
+                toBucket: bucket,
+                toKey: newKey,
+                sourceLastModified: obj.LastModified ?? new Date(),
+                sourceSize: BigInt(obj.Size ?? 0),
+              })
+              if (thumbnailResult.moved) thumbnailMoved++
+              if (thumbnailResult.queued) thumbnailQueued++
+            }
+
             movedCount++
           }
 
@@ -124,6 +146,19 @@ export async function POST(request: NextRequest) {
         )
 
         // Update FileMetadata entry
+        const existingMetadata = await prisma.fileMetadata.findFirst({
+          where: {
+            userId: session.user.id,
+            credentialId: credential.id,
+            bucket: fromBucket,
+            key: from,
+          },
+          select: {
+            size: true,
+            lastModified: true,
+          },
+        })
+
         await prisma.fileMetadata.updateMany({
           where: {
             userId: session.user.id,
@@ -137,6 +172,21 @@ export async function POST(request: NextRequest) {
             extension: getObjectExtension(to, to.endsWith("/")),
           },
         })
+
+        if (!to.endsWith("/")) {
+          const thumbnailResult = await moveMediaThumbnailForObject({
+            userId: session.user.id,
+            credentialId: credential.id,
+            fromBucket,
+            fromKey: from,
+            toBucket: bucket,
+            toKey: to,
+            sourceLastModified: existingMetadata?.lastModified ?? new Date(),
+            sourceSize: existingMetadata?.size ?? BigInt(0),
+          })
+          if (thumbnailResult.moved) thumbnailMoved++
+          if (thumbnailResult.queued) thumbnailQueued++
+        }
 
         movedCount++
       }
@@ -157,6 +207,8 @@ export async function POST(request: NextRequest) {
         credentialId: credential.id,
         operations: operations.length,
         moved: movedCount,
+        thumbnailMoved,
+        thumbnailQueued,
       },
       ...requestContext,
     })

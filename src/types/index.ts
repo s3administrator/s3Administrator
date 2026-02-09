@@ -18,4 +18,25 @@ export interface ListObjectsResponse {
   nextToken?: string
 }
 
+export type MediaType = "image" | "video"
+export type ThumbnailStatus = "pending" | "processing" | "ready" | "failed" | null
+
+export interface GalleryItem {
+  id: string
+  key: string
+  size: number
+  lastModified: string
+  extension: string
+  mediaType: MediaType
+  previewUrl: string | null
+  thumbnailStatus: ThumbnailStatus
+  isVideo: boolean
+}
+
+export interface GalleryResponse {
+  items: GalleryItem[]
+  nextCursor: string | null
+  hasMore: boolean
+}
+
 export type Tier = "free" | "pro" | "team"

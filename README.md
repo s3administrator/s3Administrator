@@ -34,3 +34,32 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Gallery Mode and Video Thumbnails
+
+The dashboard supports `List` and `Gallery` mode.
+
+- Gallery uses infinite scrolling and recursive listing under the current prefix.
+- Image previews are loaded from signed S3 URLs.
+- Video thumbnails are generated asynchronously by background tasks.
+
+### Required environment variables (thumbnail storage)
+
+Set these in `.env.dev` / `.env.prod`:
+
+```bash
+THUMBNAIL_S3_ENDPOINT=
+THUMBNAIL_S3_REGION=
+THUMBNAIL_S3_ACCESS_KEY=
+THUMBNAIL_S3_SECRET_KEY=
+THUMBNAIL_S3_BUCKET=
+THUMBNAIL_MAX_WIDTH=480
+THUMBNAIL_URL_TTL_SECONDS=3600
+```
+
+### Runtime requirement
+
+The production app container installs `ffmpeg` and generates thumbnails in-process with:
+
+- max 2 concurrent ffmpeg jobs per app instance
+- 5 second timeout per thumbnail job

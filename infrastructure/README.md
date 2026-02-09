@@ -11,6 +11,19 @@ This folder provisions production for `www.s3administrator.com` on Hetzner:
 - Root app `.env` is generated from local `../.env` with production overrides
 - Bootstrap runs `make prod` (build + db + tools migrate/seed + app/proxy start)
 - Caddy proxy service handles reverse proxy in both local/prod (`Caddyfile.local` / `Caddyfile.prod`)
+- Gallery mode video thumbnail generation requires thumbnail storage env vars in root `.env`
+
+## Thumbnail storage env vars
+
+These must exist in your root `.env` before deploy:
+
+- `THUMBNAIL_S3_ENDPOINT`
+- `THUMBNAIL_S3_REGION`
+- `THUMBNAIL_S3_ACCESS_KEY`
+- `THUMBNAIL_S3_SECRET_KEY`
+- `THUMBNAIL_S3_BUCKET`
+- `THUMBNAIL_MAX_WIDTH` (default `480`)
+- `THUMBNAIL_URL_TTL_SECONDS` (default `3600`)
 
 ## 1) Prepare secrets
 

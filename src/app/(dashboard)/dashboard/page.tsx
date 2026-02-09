@@ -1,10 +1,12 @@
 "use client"
 
 import { useSearchParams, useRouter } from "next/navigation"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { useState, useCallback, Suspense } from "react"
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useState, useCallback, Suspense, useMemo, useEffect, useRef } from "react"
 import { Topbar } from "@/components/dashboard/topbar"
 import { FileBrowser } from "@/components/dashboard/file-browser"
+import { GalleryBrowser } from "@/components/dashboard/gallery-browser"
+import { GalleryLightbox } from "@/components/dashboard/gallery-lightbox"
 import { MultiSelectToolbar } from "@/components/dashboard/multi-select-toolbar"
 import { UploadDialog } from "@/components/dashboard/upload-dialog"
 import { DeleteConfirmDialog } from "@/components/dashboard/delete-confirm-dialog"
@@ -14,7 +16,7 @@ import { DashboardOverview } from "@/components/dashboard/dashboard-overview"
 import { EmptyState } from "@/components/dashboard/empty-state"
 import { Loader2 } from "lucide-react"
 import { toast } from "sonner"
-import type { S3Object } from "@/types"
+import type { GalleryResponse, S3Object } from "@/types"
 
 interface MoveOperation {
   from: string
@@ -58,6 +60,9 @@ function DashboardContent() {
   const [searchQuery, setSearchQuery] = useState("")
   const [sortBy, setSortBy] = useState<"name" | "size" | "lastModified">("name")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
+  const [viewMode, setViewMode] = useState<"list" | "gallery">("list")
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  const requestedThumbnailKeysRef = useRef<Set<string>>(new Set())
 
   const [uploadOpen, setUploadOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -84,6 +89,35 @@ function DashboardContent() {
     enabled: !!bucket,
   })
 
+  const {
+    data: galleryData,
+    isLoading: galleryLoading,
+    isFetchingNextPage,
+    fetchNextPage,
+    hasNextPage,
+    refetch: refetchGallery,
+  } = useInfiniteQuery<GalleryResponse>({
+    queryKey: ["gallery", bucket, prefix, credentialId],
+    initialPageParam: null as string | null,
+    queryFn: async ({ pageParam }) => {
+      const cursor = typeof pageParam === "string" ? pageParam : null
+      const params = new URLSearchParams({
+        bucket,
+        limit: "60",
+        mediaType: "all",
+      })
+      if (prefix) params.set("prefix", prefix)
+      if (credentialId) params.set("credentialId", credentialId)
+      if (cursor) params.set("cursor", cursor)
+      const res = await fetch(`/api/s3/gallery?${params}`)
+      if (!res.ok) throw new Error("Failed to load gallery")
+      return res.json() as Promise<GalleryResponse>
+    },
+    getNextPageParam: (lastPage) => (lastPage.nextCursor ? lastPage.nextCursor : undefined),
+    enabled: !!bucket && viewMode === "gallery",
+    refetchInterval: viewMode === "gallery" ? 15000 : false,
+  })
+
   const { data: credentials = [], isLoading: credentialsLoading } = useQuery<Credential[]>({
     queryKey: ["credentials"],
     queryFn: async () => {
@@ -105,15 +139,24 @@ function DashboardContent() {
     enabled: !bucket,
   })
 
-  const allItems = [...(data?.folders ?? []), ...(data?.files ?? [])]
+  const allItems = useMemo(
+    () => [...(data?.folders ?? []), ...(data?.files ?? [])],
+    [data?.files, data?.folders]
+  )
 
-  const filteredItems = searchQuery
-    ? allItems.filter((item) =>
-        item.key.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : allItems
+  const galleryItems = useMemo(
+    () => galleryData?.pages.flatMap((page) => page.items) ?? [],
+    [galleryData?.pages]
+  )
 
-  const sortedItems = [...filteredItems].sort((a, b) => {
+  const filteredItems = useMemo(() => {
+    if (!searchQuery) return allItems
+    return allItems.filter((item) =>
+      item.key.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+  }, [allItems, searchQuery])
+
+  const sortedItems = useMemo(() => [...filteredItems].sort((a, b) => {
     if (a.isFolder && !b.isFolder) return -1
     if (!a.isFolder && b.isFolder) return 1
 
@@ -128,10 +171,78 @@ function DashboardContent() {
         new Date(b.lastModified).getTime()
     }
     return sortDir === "asc" ? cmp : -cmp
-  })
+  }), [filteredItems, sortBy, sortDir])
+
+  const filteredGalleryItems = useMemo(() => {
+    if (!searchQuery) return galleryItems
+    return galleryItems.filter((item) =>
+      item.key.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+  }, [galleryItems, searchQuery])
+
+  const sortedGalleryItems = useMemo(() => [...filteredGalleryItems].sort((a, b) => {
+    let cmp = 0
+    if (sortBy === "name") {
+      cmp = a.key.localeCompare(b.key)
+    } else if (sortBy === "size") {
+      cmp = a.size - b.size
+    } else {
+      cmp =
+        new Date(a.lastModified).getTime() -
+        new Date(b.lastModified).getTime()
+    }
+    return sortDir === "asc" ? cmp : -cmp
+  }), [filteredGalleryItems, sortBy, sortDir])
+
+  useEffect(() => {
+    if (viewMode !== "gallery") return
+    if (!bucket) return
+
+    const toRequest = sortedGalleryItems
+      .filter(
+        (item) =>
+          item.isVideo &&
+          item.thumbnailStatus !== "ready" &&
+          !requestedThumbnailKeysRef.current.has(item.key)
+      )
+      .map((item) => item.key)
+
+    if (toRequest.length === 0) return
+
+    for (const key of toRequest) {
+      requestedThumbnailKeysRef.current.add(key)
+    }
+
+    const chunks: string[][] = []
+    for (let i = 0; i < toRequest.length; i += 200) {
+      chunks.push(toRequest.slice(i, i + 200))
+    }
+
+    void (async () => {
+      for (const keys of chunks) {
+        const res = await fetch("/api/s3/thumbnails/request", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            bucket,
+            credentialId,
+            keys,
+          }),
+        }).catch(() => null)
+
+        if (!res) {
+          for (const key of keys) {
+            requestedThumbnailKeysRef.current.delete(key)
+          }
+        }
+      }
+      void refetchGallery().catch(() => {})
+    })()
+  }, [bucket, credentialId, refetchGallery, sortedGalleryItems, viewMode])
 
   const invalidateBucketQueries = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["objects"] })
+    queryClient.invalidateQueries({ queryKey: ["gallery"] })
     queryClient.invalidateQueries({ queryKey: ["bucket-stats"] })
     setSelectedKeys(new Set())
   }, [queryClient])
@@ -169,6 +280,15 @@ function DashboardContent() {
     }
   }, [syncCurrentBucket, invalidateBucketQueries])
 
+  useEffect(() => {
+    setSelectedKeys(new Set())
+    setLightboxIndex(null)
+  }, [bucket, prefix, credentialId, viewMode])
+
+  useEffect(() => {
+    requestedThumbnailKeysRef.current.clear()
+  }, [bucket, prefix, credentialId])
+
   function handleNavigate(folderKey: string) {
     const params = new URLSearchParams({ bucket })
     if (folderKey) params.set("prefix", folderKey)
@@ -187,10 +307,20 @@ function DashboardContent() {
   }
 
   function handleSelectAll() {
-    if (selectedKeys.size === sortedItems.length) {
+    const visibleKeys = viewMode === "gallery"
+      ? sortedGalleryItems.map((item) => item.key)
+      : sortedItems.map((item) => item.key)
+
+    if (visibleKeys.length === 0) {
+      setSelectedKeys(new Set())
+      return
+    }
+
+    const allSelected = visibleKeys.every((key) => selectedKeys.has(key))
+    if (allSelected) {
       setSelectedKeys(new Set())
     } else {
-      setSelectedKeys(new Set(sortedItems.map((item) => item.key)))
+      setSelectedKeys(new Set(visibleKeys))
     }
   }
 
@@ -269,9 +399,16 @@ function DashboardContent() {
     )
   }
 
-  const selectedItems = sortedItems.filter((item) =>
-    selectedKeys.has(item.key)
-  )
+  const selectedItems: S3Object[] = viewMode === "gallery"
+    ? sortedGalleryItems
+      .filter((item) => selectedKeys.has(item.key))
+      .map((item) => ({
+        key: item.key,
+        size: item.size,
+        lastModified: item.lastModified,
+        isFolder: false,
+      }))
+    : sortedItems.filter((item) => selectedKeys.has(item.key))
 
   function buildMoveOperations(items: S3Object[], destinationFolderKey: string): MoveOperation[] {
     const itemsToMove = items.filter((item) => item.key !== destinationFolderKey)
@@ -422,6 +559,8 @@ function DashboardContent() {
         onSort={handleSort}
         sortBy={sortBy}
         sortDir={sortDir}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
       />
 
       {selectedKeys.size > 0 && (
@@ -433,30 +572,64 @@ function DashboardContent() {
             setNewFolderMoveItems(selectedItems)
             setNewFolderOpen(true)
           }}
-          onMoveToSelectedFolder={() => {
-            if (!moveProgress) {
-              void handleMoveToSelectedFolder()
-            }
-          }}
+          onMoveToSelectedFolder={
+            viewMode === "list"
+              ? () => {
+                if (!moveProgress) {
+                  void handleMoveToSelectedFolder()
+                }
+              }
+              : undefined
+          }
+          selectionHint={
+            viewMode === "gallery"
+              ? "Move-to-selected-folder is available in list mode."
+              : undefined
+          }
           onClear={() => setSelectedKeys(new Set())}
         />
       )}
 
-      <FileBrowser
-        prefix={prefix}
-        files={sortedItems}
-        isLoading={isLoading}
-        selectedKeys={selectedKeys}
-        onSelect={(file) => handleSelect(file.key)}
-        onSelectAll={handleSelectAll}
-        onNavigate={(file) => handleNavigate(file.key)}
-        onRename={(file) => handleRename(file.key, file.isFolder)}
-        onDelete={(file) => {
-          setSelectedKeys(new Set([file.key]))
-          setDeleteOpen(true)
-        }}
-        onDownload={(file) => handleDownload([file.key])}
-      />
+      {viewMode === "gallery" ? (
+        <GalleryBrowser
+          items={sortedGalleryItems}
+          isLoading={galleryLoading}
+          isFetchingNextPage={isFetchingNextPage}
+          hasNextPage={Boolean(hasNextPage)}
+          selectedKeys={selectedKeys}
+          onSelect={(item) => handleSelect(item.key)}
+          onSelectAllVisible={handleSelectAll}
+          onOpenPreview={(item) => {
+            const index = sortedGalleryItems.findIndex((entry) => entry.key === item.key)
+            if (index >= 0) setLightboxIndex(index)
+          }}
+          onDownload={(item) => handleDownload([item.key])}
+          onDelete={(item) => {
+            setSelectedKeys(new Set([item.key]))
+            setDeleteOpen(true)
+          }}
+          onLoadMore={() => {
+            if (!hasNextPage || isFetchingNextPage) return
+            void fetchNextPage()
+          }}
+        />
+      ) : (
+        <FileBrowser
+          prefix={prefix}
+          files={sortedItems}
+          isLoading={isLoading}
+          selectedKeys={selectedKeys}
+          onSelect={(file) => handleSelect(file.key)}
+          onSelectAll={handleSelectAll}
+          onNavigate={(file) => handleNavigate(file.key)}
+          onRename={(file) => handleRename(file.key, file.isFolder)}
+          onDelete={(file) => {
+            setSelectedKeys(new Set([file.key]))
+            setDeleteOpen(true)
+          }}
+          onDownload={(file) => handleDownload([file.key])}
+        />
+      )}
 
       <UploadDialog
         open={uploadOpen}
@@ -474,6 +647,18 @@ function DashboardContent() {
         bucket={bucket}
         credentialId={credentialId}
         onDeleteComplete={handleBucketOperationComplete}
+      />
+
+      <GalleryLightbox
+        open={lightboxIndex !== null}
+        onOpenChange={(open) => {
+          if (!open) setLightboxIndex(null)
+        }}
+        items={sortedGalleryItems}
+        currentIndex={lightboxIndex ?? 0}
+        bucket={bucket}
+        credentialId={credentialId}
+        onNavigate={(index) => setLightboxIndex(index)}
       />
 
       {renameTarget && (

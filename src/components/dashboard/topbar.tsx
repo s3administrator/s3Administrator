@@ -9,6 +9,8 @@ import {
   RefreshCw,
   Home,
   ArrowUpDown,
+  LayoutGrid,
+  List,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -38,6 +40,8 @@ interface TopbarProps {
   onSort?: (column: "name" | "size" | "lastModified") => void
   sortBy?: string
   sortDir?: string
+  viewMode?: "list" | "gallery"
+  onViewModeChange?: (mode: "list" | "gallery") => void
 }
 
 function buildBreadcrumbSegments(bucket: string, prefix: string, credentialId?: string) {
@@ -79,6 +83,8 @@ export function Topbar({
   onSort,
   sortBy,
   sortDir,
+  viewMode = "list",
+  onViewModeChange,
 }: TopbarProps) {
   const [searchValue, setSearchValue] = useState("")
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -144,6 +150,30 @@ export function Topbar({
         </Breadcrumb>
 
         <div className="flex items-center gap-2">
+          {onViewModeChange && (
+            <div className="flex items-center overflow-hidden rounded-md border">
+              <Button
+                type="button"
+                variant={viewMode === "list" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-8 rounded-none border-0"
+                onClick={() => onViewModeChange("list")}
+              >
+                <List className="mr-1.5 h-4 w-4" />
+                List
+              </Button>
+              <Button
+                type="button"
+                variant={viewMode === "gallery" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-8 rounded-none border-0"
+                onClick={() => onViewModeChange("gallery")}
+              >
+                <LayoutGrid className="mr-1.5 h-4 w-4" />
+                Gallery
+              </Button>
+            </div>
+          )}
           <Button variant="outline" size="sm" onClick={onUpload}>
             <Upload className="mr-1.5 h-4 w-4" />
             Upload

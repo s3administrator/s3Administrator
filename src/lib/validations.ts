@@ -69,3 +69,24 @@ export const createFolderSchema = z.object({
   credentialId: z.string().optional(),
   key: s3KeySchema,
 })
+
+export const galleryListSchema = z.object({
+  bucket: s3BucketSchema,
+  credentialId: z.string().optional(),
+  prefix: z.string().max(1024).optional(),
+  cursor: z.string().max(512).optional(),
+  limit: z.coerce.number().int().min(1).max(120).default(60),
+  mediaType: z.enum(["all", "image", "video"]).default("all"),
+})
+
+export const thumbnailRequestSchema = z.object({
+  bucket: s3BucketSchema,
+  credentialId: z.string().optional(),
+  keys: z.array(s3KeySchema).min(1).max(200),
+})
+
+export const previewSchema = z.object({
+  bucket: s3BucketSchema,
+  credentialId: z.string().optional(),
+  key: s3KeySchema,
+})

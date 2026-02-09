@@ -6,6 +6,7 @@ import { rebuildUserExtensionStats } from "@/lib/file-stats"
 import { deleteObjectsSchema } from "@/lib/validations"
 import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
 import { getRequestContext, logUserAuditAction } from "@/lib/audit-logger"
+import { deleteMediaThumbnailsForKeys } from "@/lib/media-thumbnails"
 import type { Prisma } from "@prisma/client"
 import {
   DeleteObjectsCommand,
@@ -93,6 +94,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
     userId = session.user.id
+    const limitResult = rateLimitByUser(session.user.id, "s3-delete", 40, 60_000)
+    if (!limitResult.success) {
+      return rateLimitResponse(limitResult.retryAfterSeconds)
+    }
 
     const body = await request.json()
     const parsed = deleteObjectsSchema.safeParse(body)
@@ -196,6 +201,8 @@ export async function POST(request: NextRequest) {
 
     let totalDeleted = 0
     const allDeletedKeys: string[] = []
+    let thumbnailDeletedRows = 0
+    let thumbnailDeletedObjects = 0
 
     // Delete individual keys
     if (keys && keys.length > 0) {
@@ -216,16 +223,27 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const uniqueDeletedKeys = Array.from(new Set(allDeletedKeys))
+
     // Remove matching FileMetadata entries from Prisma
-    if (allDeletedKeys.length > 0) {
+    if (uniqueDeletedKeys.length > 0) {
       await prisma.fileMetadata.deleteMany({
         where: {
           userId: session.user.id,
           credentialId: credential.id,
           bucket,
-          key: { in: allDeletedKeys },
+          key: { in: uniqueDeletedKeys },
         },
       })
+
+      const thumbnailDeletion = await deleteMediaThumbnailsForKeys({
+        userId: session.user.id,
+        credentialId: credential.id,
+        bucket,
+        keys: uniqueDeletedKeys,
+      })
+      thumbnailDeletedRows += thumbnailDeletion.deletedRows
+      thumbnailDeletedObjects += thumbnailDeletion.deletedObjects
     }
 
     // Also delete metadata for any prefix patterns
@@ -255,8 +273,11 @@ export async function POST(request: NextRequest) {
         bucket,
         credentialId: credential.id,
         deleted: totalDeleted,
+        uniqueDeletedKeys: uniqueDeletedKeys.length,
         keysRequested: keys?.length ?? 0,
         prefixesRequested: prefixes?.length ?? 0,
+        thumbnailRowsDeleted: thumbnailDeletedRows,
+        thumbnailObjectsDeleted: thumbnailDeletedObjects,
       },
       ...requestContext,
     })
