@@ -1,6 +1,7 @@
 .PHONY: help check-node dev build start db-up db-down db-reset migrate generate studio lint clean docker-build docker-up docker-down nuke setup seed wait-db prod prod-check prod-migrate prod-seed
 
 DC = docker compose --env-file .env -f docker/docker-compose.yml
+PRISMA_CLI_VERSION = 6.19.2
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -86,10 +87,10 @@ prod: prod-check docker-build ## Build image, start db, apply migrations+seed, t
 	@echo "\n✓ Production stack is up and seeded."
 
 prod-migrate: ## Run Prisma migrate deploy inside app container
-	$(DC) run --rm -T app npx prisma migrate deploy
+	$(DC) run --rm -T app npx --yes prisma@$(PRISMA_CLI_VERSION) migrate deploy
 
 prod-seed: ## Seed default plans inside app container
-	$(DC) run --rm -T app npx prisma db seed
+	$(DC) run --rm -T app npx --yes prisma@$(PRISMA_CLI_VERSION) db seed
 
 # ─── Setup & Cleanup ────────────────────────────────────
 

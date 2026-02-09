@@ -38,6 +38,10 @@ write_files:
         apt-get install -y nodejs
       fi
 
+      if systemctl list-unit-files | grep -q '^caddy.service'; then
+        systemctl disable --now caddy || true
+      fi
+
       systemctl enable --now docker
 
       mkdir -p "${app_directory}"
