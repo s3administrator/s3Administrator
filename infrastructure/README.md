@@ -9,7 +9,7 @@ This folder provisions production for `www.s3administrator.com` on Hetzner:
 - Bootstrap installs Docker and runs a Caddy proxy container
 - App is cloned from `tahayusufkomur/s3Administrator`
 - Root app `.env` is generated from local `../.env` with production overrides
-- Bootstrap runs `make prod` (build + db migrate + seed + app start)
+- Bootstrap runs `make prod` (build + db + tools migrate/seed + app/proxy start)
 - Caddy proxy service handles reverse proxy in both local/prod (`Caddyfile.local` / `Caddyfile.prod`)
 
 ## 1) Prepare secrets

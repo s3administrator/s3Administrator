@@ -31,6 +31,21 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  tools:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: tools
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-DEV}
+      - DATABASE_URL=postgresql://s3admin:${POSTGRES_PASSWORD}@db:5432/s3_admin
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_SECRET_KEY_DEV=${STRIPE_SECRET_KEY_DEV}
+      - STRIPE_SECRET_KEY_PROD=${STRIPE_SECRET_KEY_PROD}
+    depends_on:
+      db:
+        condition: service_healthy
+
   proxy:
     image: caddy:2.10-alpine
     ports:

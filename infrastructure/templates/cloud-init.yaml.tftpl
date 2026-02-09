@@ -76,7 +76,7 @@ write_files:
       Type=oneshot
       RemainAfterExit=yes
       WorkingDirectory=${app_directory}
-      ExecStart=/usr/bin/docker compose -f docker/docker-compose.yml up -d --build
+      ExecStart=/usr/bin/docker compose -f docker/docker-compose.yml up -d --build app db proxy
       ExecStop=/usr/bin/docker compose -f docker/docker-compose.yml down
       TimeoutStartSec=0
 

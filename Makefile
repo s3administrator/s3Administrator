@@ -1,8 +1,6 @@
 .PHONY: help check-node dev build start db-up db-down db-reset migrate generate studio lint clean docker-build docker-up docker-down nuke setup seed wait-db prod prod-check prod-migrate prod-seed
 
 DC = docker compose --env-file .env -f docker/docker-compose.yml
-PRISMA_CLI_VERSION = 6.19.2
-
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
@@ -53,14 +51,14 @@ seed: check-node ## Seed the database with default plans
 # ─── Docker Production ───────────────────────────────────
 
 docker-build: ## Build Docker image
-	$(DC) build
+	$(DC) build app tools
 
 docker-up: ## Start all services (app + db) — blocks if PROD uses default password
 	@. ./.env 2>/dev/null; \
 	if [ "$$ENVIRONMENT" = "PROD" ] && [ "$$POSTGRES_PASSWORD" = "password" ]; then \
 		echo "ERROR: Cannot start PROD with default POSTGRES_PASSWORD. Set a strong password in .env"; exit 1; \
 	fi
-	$(DC) up -d
+	$(DC) up -d app db proxy
 
 docker-down: ## Stop all services
 	$(DC) down
@@ -87,10 +85,10 @@ prod: prod-check docker-build ## Build image, start db, apply migrations+seed, t
 	@echo "\n✓ Production stack is up and seeded."
 
 prod-migrate: ## Run Prisma migrate deploy inside app container
-	$(DC) run --rm -T app npx --yes prisma@$(PRISMA_CLI_VERSION) migrate deploy
+	$(DC) run --rm -T tools npx --no-install prisma migrate deploy
 
 prod-seed: ## Seed default plans inside app container
-	$(DC) run --rm -T app npx --yes prisma@$(PRISMA_CLI_VERSION) db seed
+	$(DC) run --rm -T tools npx --no-install prisma db seed
 
 # ─── Setup & Cleanup ────────────────────────────────────
 
