@@ -22,15 +22,6 @@ write_files:
         curl -fsSL https://get.docker.com | sh
       fi
 
-      if ! command -v caddy >/dev/null 2>&1; then
-        apt-get update
-        apt-get install -y debian-keyring debian-archive-keyring apt-transport-https
-        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/apt/sources.list.d/caddy-stable.list
-        apt-get update
-        apt-get install -y caddy
-      fi
-
       REQUIRED_NODE_MAJOR="${node_major_version}"
       NEED_NODE_INSTALL=0
       if ! command -v node >/dev/null 2>&1; then
@@ -66,16 +57,6 @@ write_files:
       cat > "${app_directory}/.env" <<'ENVEOF'
       ${indent(6, app_env_content)}
       ENVEOF
-
-      cat > /etc/caddy/Caddyfile <<'CADDYEOF'
-      ${domain} {
-        encode zstd gzip
-        reverse_proxy 127.0.0.1:3000
-      }
-      CADDYEOF
-
-      systemctl enable caddy
-      systemctl restart caddy
 
       cd "${app_directory}"
       make prod

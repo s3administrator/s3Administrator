@@ -82,7 +82,7 @@ prod: prod-check docker-build ## Build image, start db, apply migrations+seed, t
 	$(MAKE) wait-db
 	$(MAKE) prod-migrate
 	$(MAKE) prod-seed
-	$(DC) up -d app
+	$(DC) up -d app proxy
 	@echo "\n✓ Production stack is up and seeded."
 
 prod-migrate: ## Run Prisma migrate deploy inside app container

@@ -9,7 +9,7 @@ services:
       - ENVIRONMENT=${ENVIRONMENT:-DEV}
       - DATABASE_URL=postgresql://s3admin:${POSTGRES_PASSWORD}@db:5432/s3_admin
       - AUTH_SECRET=${AUTH_SECRET}
-      - AUTH_URL=${AUTH_URL:-http://localhost:3000}
+      - AUTH_URL=${AUTH_URL:-http://localhost}
       # OAuth — pass both _DEV and _PROD; the app resolves based on ENVIRONMENT
       - GITHUB_CLIENT_ID_DEV=${GITHUB_CLIENT_ID_DEV}
       - GITHUB_CLIENT_SECRET_DEV=${GITHUB_CLIENT_SECRET_DEV}
@@ -31,6 +31,22 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  proxy:
+    image: caddy:2.10-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN:-www.s3administrator.com}
+    volumes:
+      - ./${CADDYFILE:-Caddyfile.local}:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      app:
+        condition: service_started
+    restart: unless-stopped
+
   db:
     image: postgres:16-alpine
     ports:
@@ -50,3 +66,5 @@ services:
 
 volumes:
   pgdata:
+  caddy_data:
+  caddy_config:

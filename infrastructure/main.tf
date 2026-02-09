@@ -53,6 +53,8 @@ locals {
     "# --- Managed production overrides ---",
     "ENVIRONMENT=\"PROD\"",
     "AUTH_URL=\"https://${var.domain}\"",
+    "DOMAIN=\"${var.domain}\"",
+    "CADDYFILE=\"Caddyfile.prod\"",
     "DATABASE_URL=\"postgresql://${var.postgres_user}:${local.postgres_password}@localhost:${var.postgres_host_port}/${var.postgres_db}\"",
     "POSTGRES_PORT=\"${var.postgres_host_port}\"",
     "POSTGRES_PASSWORD=\"${local.postgres_password}\"",
