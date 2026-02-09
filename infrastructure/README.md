@@ -5,7 +5,7 @@ This folder provisions production for `www.s3administrator.com` on Hetzner:
 - Hetzner server: `cx33` in `fsn1`
 - SSH key registration for root access (reuses existing Hetzner key if already present)
 - Firewall for `22`, `80`, `443`
-- Cloudflare DNS `A` record for `www`
+- Cloudflare DNS `A` records for both `www` and apex (`@`)
 - Bootstrap installs Docker and runs a Caddy proxy container
 - App is cloned from `tahayusufkomur/s3Administrator`
 - Root app `.env` is generated from local `../.env` with production overrides

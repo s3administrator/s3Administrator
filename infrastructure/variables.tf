@@ -77,6 +77,12 @@ variable "domain" {
   default     = "www.s3administrator.com"
 }
 
+variable "root_domain" {
+  description = "Apex/root domain served by Caddy and used for DNS apex record"
+  type        = string
+  default     = "s3administrator.com"
+}
+
 variable "cloudflare_zone_name" {
   description = "Cloudflare zone name"
   type        = string
@@ -87,6 +93,12 @@ variable "cloudflare_record_name" {
   description = "DNS record name for the app"
   type        = string
   default     = "www"
+}
+
+variable "cloudflare_apex_record_name" {
+  description = "DNS record name for apex/root record"
+  type        = string
+  default     = "@"
 }
 
 variable "cloudflare_proxied" {

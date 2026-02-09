@@ -10,6 +10,8 @@ services:
       - DATABASE_URL=postgresql://s3admin:${POSTGRES_PASSWORD}@db:5432/s3_admin
       - AUTH_SECRET=${AUTH_SECRET}
       - AUTH_URL=${AUTH_URL:-http://localhost}
+      - NEXT_PUBLIC_GA_MEASUREMENT_ID=${NEXT_PUBLIC_GA_MEASUREMENT_ID}
+      - ENABLE_ACTION_TRACKING=${ENABLE_ACTION_TRACKING:-true}
       # OAuth — pass both _DEV and _PROD; the app resolves based on ENVIRONMENT
       - GITHUB_CLIENT_ID_DEV=${GITHUB_CLIENT_ID_DEV}
       - GITHUB_CLIENT_SECRET_DEV=${GITHUB_CLIENT_SECRET_DEV}
@@ -53,6 +55,7 @@ services:
       - "443:443"
     environment:
       - DOMAIN=${DOMAIN:-www.s3administrator.com}
+      - ROOT_DOMAIN=${ROOT_DOMAIN:-s3administrator.com}
     volumes:
       - ./${CADDYFILE:-Caddyfile.local}:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

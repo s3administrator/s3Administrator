@@ -89,6 +89,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           data: { role: "admin" },
         })
       }
+
+      if (user.id) {
+        await prisma.userActionEvent
+          .create({
+            data: {
+              userId: user.id,
+              eventType: "auth",
+              eventName: "sign_in",
+              path: "/api/auth/[...nextauth]",
+              metadata: { email: user.email ?? null },
+            },
+          })
+          .catch(() => null)
+      }
     },
   },
   callbacks: {

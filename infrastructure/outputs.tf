@@ -14,6 +14,11 @@ output "ssh_command" {
 }
 
 output "dns_record" {
-  description = "Cloudflare DNS record created"
+  description = "Cloudflare DNS record for www"
   value       = var.create_cloudflare_record ? "${var.cloudflare_record_name}.${var.cloudflare_zone_name}" : "not-managed"
+}
+
+output "dns_apex_record" {
+  description = "Cloudflare DNS apex/root record"
+  value       = var.create_cloudflare_record ? var.root_domain : "not-managed"
 }

@@ -26,9 +26,30 @@ model User {
   fileExtensionStats UserFileExtensionStat[]
   backgroundTasks BackgroundTask[]
   subscriptions  Subscription[]
+  actionEvents   UserActionEvent[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model UserActionEvent {
+  id        String   @id @default(cuid())
+  userId    String?
+  eventType String
+  eventName String
+  path      String
+  method    String?
+  target    String?
+  metadata  Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([eventType, createdAt])
 }
 
 model Account {

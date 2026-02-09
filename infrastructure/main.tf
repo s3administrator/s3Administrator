@@ -54,6 +54,7 @@ locals {
     "ENVIRONMENT=\"PROD\"",
     "AUTH_URL=\"https://${var.domain}\"",
     "DOMAIN=\"${var.domain}\"",
+    "ROOT_DOMAIN=\"${var.root_domain}\"",
     "CADDYFILE=\"Caddyfile.prod\"",
     "DATABASE_URL=\"postgresql://${var.postgres_user}:${local.postgres_password}@localhost:${var.postgres_host_port}/${var.postgres_db}\"",
     "POSTGRES_PORT=\"${var.postgres_host_port}\"",
@@ -149,6 +150,17 @@ resource "cloudflare_record" "www" {
 
   zone_id = data.cloudflare_zone.zone[0].id
   name    = var.cloudflare_record_name
+  content = hcloud_server.prod.ipv4_address
+  type    = "A"
+  ttl     = 1
+  proxied = var.cloudflare_proxied
+}
+
+resource "cloudflare_record" "apex" {
+  count = var.create_cloudflare_record ? 1 : 0
+
+  zone_id = data.cloudflare_zone.zone[0].id
+  name    = var.cloudflare_apex_record_name
   content = hcloud_server.prod.ipv4_address
   type    = "A"
   ttl     = 1
