@@ -7,6 +7,7 @@ import { SessionProvider } from "@/components/providers/session-provider"
 import { ThemeProvider } from "@/components/providers/theme-provider"
 import { GoogleAnalytics } from "@/components/providers/google-analytics"
 import { ActionTracker } from "@/components/providers/action-tracker"
+import { ConsentBanner } from "@/components/providers/consent-banner"
 import "./globals.css"
 
 const geistSans = Geist({
@@ -40,6 +41,7 @@ export default function RootLayout({
         <Suspense fallback={null}>
           <GoogleAnalytics measurementId={gaMeasurementId} />
         </Suspense>
+        <ConsentBanner enabled={Boolean(gaMeasurementId)} />
         <ThemeProvider>
           <SessionProvider>
             <QueryProvider>
