@@ -70,6 +70,7 @@ export function ActionTracker({ enabled }: { enabled: boolean }) {
           eventType: "page_view",
           eventName: "page_view",
           path: currentPath(pathname, searchParams),
+          metadata: { referrer: document.referrer || null },
         },
       ])
     }
@@ -124,7 +125,10 @@ export function ActionTracker({ enabled }: { enabled: boolean }) {
           eventName: (clickable as HTMLElement).dataset.track || "click",
           path,
           target: describeElement(clickable),
-          metadata: href ? { href } : undefined,
+          metadata: {
+            href: href ?? null,
+            text: compactText((clickable as HTMLElement).textContent ?? ""),
+          },
         },
         250
       )
@@ -149,7 +153,7 @@ export function ActionTracker({ enabled }: { enabled: boolean }) {
     const originalFetch = window.fetch
 
     const wrappedFetch: typeof window.fetch = async (input, init) => {
-      const response = await originalFetch(input, init)
+      const startedAt = performance.now()
 
       try {
         const method = (
@@ -168,7 +172,12 @@ export function ActionTracker({ enabled }: { enabled: boolean }) {
           parsedUrl.pathname.startsWith("/api/") &&
           parsedUrl.pathname !== "/api/analytics/events"
 
-        if (isInternalApi) {
+        if (!isInternalApi) {
+          return await originalFetch(input, init)
+        }
+
+        try {
+          const response = await originalFetch(input, init)
           send(
             {
               eventType: "api_call",
@@ -176,27 +185,89 @@ export function ActionTracker({ enabled }: { enabled: boolean }) {
               path: currentPath(pathname, searchParams),
               method,
               target: parsedUrl.pathname,
-              metadata: { status: response.status },
+              metadata: {
+                status: response.status,
+                ok: response.ok,
+                durationMs: Math.round(performance.now() - startedAt),
+              },
             },
-            1000
+            500
           )
+          return response
+        } catch (error) {
+          send(
+            {
+              eventType: "api_call",
+              eventName: `${method} ${parsedUrl.pathname}`,
+              path: currentPath(pathname, searchParams),
+              method,
+              target: parsedUrl.pathname,
+              metadata: {
+                status: 0,
+                ok: false,
+                durationMs: Math.round(performance.now() - startedAt),
+                error:
+                  error instanceof Error
+                    ? error.message
+                    : "request_failed",
+              },
+            },
+            500
+          )
+          throw error
         }
       } catch {
-        // Keep UI resilient if event tracking fails.
+        return await originalFetch(input, init)
       }
+    }
 
-      return response
+    const onError = (rawEvent: ErrorEvent) => {
+      send(
+        {
+          eventType: "error",
+          eventName: "window_error",
+          path: currentPath(pathname, searchParams),
+          target: rawEvent.filename
+            ? `${rawEvent.filename}:${rawEvent.lineno}:${rawEvent.colno}`
+            : "window",
+          metadata: {
+            message: rawEvent.message,
+          },
+        },
+        500
+      )
+    }
+
+    const onUnhandledRejection = (rawEvent: PromiseRejectionEvent) => {
+      let reason = "unhandled_rejection"
+      if (rawEvent.reason instanceof Error) reason = rawEvent.reason.message
+      else if (typeof rawEvent.reason === "string") reason = rawEvent.reason
+
+      send(
+        {
+          eventType: "error",
+          eventName: "unhandled_rejection",
+          path: currentPath(pathname, searchParams),
+          target: "promise",
+          metadata: { reason },
+        },
+        500
+      )
     }
 
     window.fetch = wrappedFetch
 
     document.addEventListener("click", onClick, true)
     document.addEventListener("submit", onSubmit, true)
+    window.addEventListener("error", onError)
+    window.addEventListener("unhandledrejection", onUnhandledRejection)
 
     return () => {
       window.fetch = originalFetch
       document.removeEventListener("click", onClick, true)
       document.removeEventListener("submit", onSubmit, true)
+      window.removeEventListener("error", onError)
+      window.removeEventListener("unhandledrejection", onUnhandledRejection)
     }
   }, [enabled, pathname, searchParams])
 
