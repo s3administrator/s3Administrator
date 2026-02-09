@@ -1,4 +1,4 @@
-.PHONY: setup prod-run dev-run stop reset-dev migrate
+.PHONY: setup prod-run dev-run stop reset-dev migrate restart
 
 DC = docker compose --env-file .env -f docker/docker-compose.yml
 
@@ -36,6 +36,11 @@ migrate: ## Run migrations & seed via tools container
 	$(DC) run --rm -T tools npx --no-install prisma migrate deploy
 	$(DC) run --rm -T tools npx --no-install prisma db seed
 	@echo "✓ Migrations applied & seeded."
+
+restart: ## Rebuild app image and restart
+	$(DC) build app
+	$(DC) up -d app
+	@echo "✓ App restarted."
 
 # ─── Stop & Reset ────────────────────────────────────────
 
