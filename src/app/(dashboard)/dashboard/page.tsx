@@ -181,6 +181,9 @@ function DashboardContent() {
   }, [galleryItems, searchQuery])
 
   const sortedGalleryItems = useMemo(() => [...filteredGalleryItems].sort((a, b) => {
+    if (a.isFolder && !b.isFolder) return -1
+    if (!a.isFolder && b.isFolder) return 1
+
     let cmp = 0
     if (sortBy === "name") {
       cmp = a.key.localeCompare(b.key)
@@ -201,6 +204,7 @@ function DashboardContent() {
     const toRequest = sortedGalleryItems
       .filter(
         (item) =>
+          !item.isFolder &&
           item.isVideo &&
           item.thumbnailStatus !== "ready" &&
           !requestedThumbnailKeysRef.current.has(item.key)
@@ -239,6 +243,11 @@ function DashboardContent() {
       void refetchGallery().catch(() => {})
     })()
   }, [bucket, credentialId, refetchGallery, sortedGalleryItems, viewMode])
+
+  const previewableGalleryItems = useMemo(
+    () => sortedGalleryItems.filter((item) => !item.isFolder),
+    [sortedGalleryItems]
+  )
 
   const invalidateBucketQueries = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["objects"] })
@@ -406,7 +415,9 @@ function DashboardContent() {
         key: item.key,
         size: item.size,
         lastModified: item.lastModified,
-        isFolder: false,
+        isFolder: item.isFolder,
+        fileCount: item.fileCount,
+        totalSize: item.totalSize,
       }))
     : sortedItems.filter((item) => selectedKeys.has(item.key))
 
@@ -567,7 +578,23 @@ function DashboardContent() {
         <MultiSelectToolbar
           selectedCount={selectedKeys.size}
           onDelete={() => setDeleteOpen(true)}
-          onDownload={() => handleDownload(Array.from(selectedKeys))}
+          onDownload={() => {
+            if (viewMode !== "gallery") {
+              void handleDownload(Array.from(selectedKeys))
+              return
+            }
+
+            const fileKeys = sortedGalleryItems
+              .filter((item) => selectedKeys.has(item.key) && !item.isFolder)
+              .map((item) => item.key)
+
+            if (fileKeys.length === 0) {
+              toast.error("Select at least one file to download")
+              return
+            }
+
+            void handleDownload(fileKeys)
+          }}
           onCreateFolder={() => {
             setNewFolderMoveItems(selectedItems)
             setNewFolderOpen(true)
@@ -599,11 +626,23 @@ function DashboardContent() {
           selectedKeys={selectedKeys}
           onSelect={(item) => handleSelect(item.key)}
           onSelectAllVisible={handleSelectAll}
+          onNavigate={(item) => {
+            if (!item.isFolder) return
+            handleNavigate(item.key)
+          }}
           onOpenPreview={(item) => {
-            const index = sortedGalleryItems.findIndex((entry) => entry.key === item.key)
+            if (item.isFolder) {
+              handleNavigate(item.key)
+              return
+            }
+
+            const index = previewableGalleryItems.findIndex((entry) => entry.key === item.key)
             if (index >= 0) setLightboxIndex(index)
           }}
-          onDownload={(item) => handleDownload([item.key])}
+          onDownload={(item) => {
+            if (item.isFolder) return
+            void handleDownload([item.key])
+          }}
           onDelete={(item) => {
             setSelectedKeys(new Set([item.key]))
             setDeleteOpen(true)
@@ -654,7 +693,7 @@ function DashboardContent() {
         onOpenChange={(open) => {
           if (!open) setLightboxIndex(null)
         }}
-        items={sortedGalleryItems}
+        items={previewableGalleryItems}
         currentIndex={lightboxIndex ?? 0}
         bucket={bucket}
         credentialId={credentialId}

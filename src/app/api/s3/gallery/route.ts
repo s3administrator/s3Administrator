@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { GetObjectCommand, type S3Client } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
-import { Prisma } from "@prisma/client"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/db"
 import { getS3Client } from "@/lib/s3"
-import { getGalleryExtensions, getMediaTypeFromExtension } from "@/lib/media"
+import { getMediaTypeFromExtension, type MediaType } from "@/lib/media"
 import { galleryListSchema } from "@/lib/validations"
 import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
 import {
@@ -14,48 +13,62 @@ import {
   getThumbnailUrlTtlSeconds,
 } from "@/lib/thumbnail-storage"
 import { getRequestContext, logUserAuditAction } from "@/lib/audit-logger"
-import type { GalleryItem, MediaType, ThumbnailStatus } from "@/types"
+import type { GalleryItem, ThumbnailStatus } from "@/types"
 
-type GalleryRow = {
+type CursorPayload = {
+  offset: number
+}
+
+type FolderCandidate = {
+  kind: "folder"
+  key: string
+  lastModified: Date
+  fileCount: number
+  totalSize: number
+}
+
+type FileCandidate = {
+  kind: "file"
   id: string
   key: string
-  size: bigint
+  size: number
   lastModified: Date
   extension: string
-  thumbnailStatus: string | null
+  mediaType: MediaType
+  isVideo: boolean
+  thumbnailStatus: ThumbnailStatus
   thumbnailBucket: string | null
   thumbnailKey: string | null
 }
 
-type DecodedCursor = {
-  lastModified: Date
-  id: string
+function encodeCursor(offset: number): string {
+  return Buffer.from(JSON.stringify({ offset }), "utf8").toString("base64url")
 }
 
-function encodeCursor(lastModified: Date, id: string): string {
-  return Buffer.from(
-    JSON.stringify({
-      lastModified: lastModified.toISOString(),
-      id,
-    }),
-    "utf8"
-  ).toString("base64url")
-}
-
-function decodeCursor(raw: string): DecodedCursor | null {
+function decodeCursor(raw: string): CursorPayload | null {
   try {
     const parsed = JSON.parse(Buffer.from(raw, "base64url").toString("utf8")) as {
-      lastModified?: unknown
-      id?: unknown
+      offset?: unknown
     }
-    if (typeof parsed.id !== "string") return null
-    if (typeof parsed.lastModified !== "string") return null
-    const date = new Date(parsed.lastModified)
-    if (Number.isNaN(date.getTime())) return null
-    return { id: parsed.id, lastModified: date }
+
+    if (typeof parsed.offset !== "number") return null
+    if (!Number.isFinite(parsed.offset) || parsed.offset < 0) return null
+
+    return { offset: Math.floor(parsed.offset) }
   } catch {
     return null
   }
+}
+
+function compareCandidates(a: FolderCandidate | FileCandidate, b: FolderCandidate | FileCandidate): number {
+  const timeDiff = b.lastModified.getTime() - a.lastModified.getTime()
+  if (timeDiff !== 0) return timeDiff
+
+  if (a.kind !== b.kind) {
+    return a.kind === "folder" ? -1 : 1
+  }
+
+  return a.key.localeCompare(b.key)
 }
 
 export async function GET(request: NextRequest) {
@@ -95,15 +108,15 @@ export async function GET(request: NextRequest) {
     const { bucket, credentialId, prefix = "", cursor, limit, mediaType } = parsed.data
     auditBucket = bucket
     const resolvedPrefix = prefix.trim()
-    const extensions = getGalleryExtensions(mediaType)
-    const cursorData = cursor ? decodeCursor(cursor) : null
+    const cursorData = cursor ? decodeCursor(cursor) : { offset: 0 }
 
-    if (cursor && !cursorData) {
+    if (!cursorData) {
       return NextResponse.json({ error: "Invalid cursor" }, { status: 400 })
     }
 
     const { client, credential } = await getS3Client(session.user.id, credentialId)
     const ttlSeconds = getThumbnailUrlTtlSeconds()
+
     let thumbnailClient: S3Client | null = null
     let defaultThumbnailBucket: string | null = null
     try {
@@ -114,56 +127,177 @@ export async function GET(request: NextRequest) {
       defaultThumbnailBucket = null
     }
 
-    const rows = await prisma.$queryRaw<GalleryRow[]>(
-      Prisma.sql`
-        SELECT
-          fm."id" AS "id",
-          fm."key" AS "key",
-          fm."size" AS "size",
-          fm."lastModified" AS "lastModified",
-          fm."extension" AS "extension",
-          mt."status" AS "thumbnailStatus",
-          mt."thumbnailBucket" AS "thumbnailBucket",
-          mt."thumbnailKey" AS "thumbnailKey"
-        FROM "FileMetadata" fm
-        LEFT JOIN "MediaThumbnail" mt
-          ON mt."userId" = fm."userId"
-         AND mt."credentialId" = fm."credentialId"
-         AND mt."bucket" = fm."bucket"
-         AND mt."key" = fm."key"
-        WHERE fm."userId" = ${session.user.id}
-          AND fm."credentialId" = ${credential.id}
-          AND fm."bucket" = ${bucket}
-          AND fm."isFolder" = false
-          AND fm."key" LIKE ${resolvedPrefix + "%"}
-          AND fm."extension" IN (${Prisma.join(extensions)})
-          ${
-            cursorData
-              ? Prisma.sql`AND (fm."lastModified", fm."id") < (${cursorData.lastModified}, ${cursorData.id})`
-              : Prisma.empty
+    const allEntries = await prisma.fileMetadata.findMany({
+      where: {
+        userId: session.user.id,
+        credentialId: credential.id,
+        bucket,
+        key: { startsWith: resolvedPrefix },
+      },
+      select: {
+        id: true,
+        key: true,
+        size: true,
+        lastModified: true,
+        isFolder: true,
+        extension: true,
+      },
+    })
+
+    const folderMap = new Map<string, { lastModified: Date; fileCount: number; totalSize: number }>()
+    const directFiles: Array<{
+      id: string
+      key: string
+      size: bigint
+      lastModified: Date
+      extension: string
+      mediaType: MediaType
+      isVideo: boolean
+    }> = []
+
+    for (const entry of allEntries) {
+      const remainder = entry.key.slice(resolvedPrefix.length)
+      if (!remainder) continue
+
+      const slashIndex = remainder.indexOf("/")
+
+      if (slashIndex !== -1) {
+        const folderKey = resolvedPrefix + remainder.slice(0, slashIndex + 1)
+        const existing = folderMap.get(folderKey)
+        const entrySize = entry.isFolder ? 0 : Number(entry.size)
+        const entryCount = entry.isFolder ? 0 : 1
+
+        if (existing) {
+          existing.totalSize += entrySize
+          existing.fileCount += entryCount
+          if (entry.lastModified > existing.lastModified) {
+            existing.lastModified = entry.lastModified
           }
-        ORDER BY fm."lastModified" DESC, fm."id" DESC
-        LIMIT ${limit + 1}
-      `
+        } else {
+          folderMap.set(folderKey, {
+            lastModified: entry.lastModified,
+            fileCount: entryCount,
+            totalSize: entrySize,
+          })
+        }
+
+        continue
+      }
+
+      if (entry.isFolder) {
+        continue
+      }
+
+      const entryMediaType = getMediaTypeFromExtension(entry.extension)
+      if (!entryMediaType) {
+        continue
+      }
+
+      if (mediaType !== "all" && entryMediaType !== mediaType) {
+        continue
+      }
+
+      directFiles.push({
+        id: entry.id,
+        key: entry.key,
+        size: entry.size,
+        lastModified: entry.lastModified,
+        extension: entry.extension,
+        mediaType: entryMediaType,
+        isVideo: entryMediaType === "video",
+      })
+    }
+
+    const videoKeys = directFiles.filter((entry) => entry.isVideo).map((entry) => entry.key)
+    const thumbnailRows = videoKeys.length > 0
+      ? await prisma.mediaThumbnail.findMany({
+          where: {
+            userId: session.user.id,
+            credentialId: credential.id,
+            bucket,
+            key: { in: videoKeys },
+          },
+          select: {
+            key: true,
+            status: true,
+            thumbnailBucket: true,
+            thumbnailKey: true,
+          },
+        })
+      : []
+
+    const thumbnailByKey = new Map(
+      thumbnailRows.map((row) => [
+        row.key,
+        {
+          status: row.status as ThumbnailStatus,
+          thumbnailBucket: row.thumbnailBucket,
+          thumbnailKey: row.thumbnailKey,
+        },
+      ])
     )
 
-    const hasMore = rows.length > limit
-    const pageRows = hasMore ? rows.slice(0, limit) : rows
+    const folderCandidates: FolderCandidate[] = Array.from(folderMap.entries()).map(([key, meta]) => ({
+      kind: "folder",
+      key,
+      lastModified: meta.lastModified,
+      fileCount: meta.fileCount,
+      totalSize: meta.totalSize,
+    }))
+
+    const fileCandidates: FileCandidate[] = directFiles.map((entry) => {
+      const thumbnail = thumbnailByKey.get(entry.key)
+      return {
+        kind: "file",
+        id: entry.id,
+        key: entry.key,
+        size: Number(entry.size),
+        lastModified: entry.lastModified,
+        extension: entry.extension,
+        mediaType: entry.mediaType,
+        isVideo: entry.isVideo,
+        thumbnailStatus: entry.isVideo ? (thumbnail?.status ?? "pending") : null,
+        thumbnailBucket: thumbnail?.thumbnailBucket ?? defaultThumbnailBucket,
+        thumbnailKey: thumbnail?.thumbnailKey ?? null,
+      }
+    })
+
+    const merged = [...folderCandidates, ...fileCandidates].sort(compareCandidates)
+
+    const start = cursorData.offset
+    const endExclusive = start + limit
+    const pageCandidates = merged.slice(start, endExclusive)
+    const hasMore = endExclusive < merged.length
+    const nextCursor = hasMore ? encodeCursor(endExclusive) : null
 
     const items = await Promise.all(
-      pageRows.map(async (row): Promise<GalleryItem> => {
-        const media = (getMediaTypeFromExtension(row.extension) ?? "image") as MediaType
-        const isVideo = media === "video"
-        let previewUrl: string | null = null
-        let status: ThumbnailStatus = null
+      pageCandidates.map(async (candidate): Promise<GalleryItem> => {
+        if (candidate.kind === "folder") {
+          return {
+            id: `folder:${candidate.key}`,
+            key: candidate.key,
+            size: candidate.totalSize,
+            lastModified: candidate.lastModified.toISOString(),
+            extension: "",
+            mediaType: null,
+            previewUrl: null,
+            thumbnailStatus: null,
+            isVideo: false,
+            isFolder: true,
+            fileCount: candidate.fileCount,
+            totalSize: candidate.totalSize,
+          }
+        }
 
-        if (!isVideo) {
+        let previewUrl: string | null = null
+
+        if (!candidate.isVideo) {
           try {
             previewUrl = await getSignedUrl(
               client,
               new GetObjectCommand({
                 Bucket: bucket,
-                Key: row.key,
+                Key: candidate.key,
                 ResponseContentDisposition: "inline",
                 ResponseCacheControl: `public, max-age=${ttlSeconds}`,
               }),
@@ -172,45 +306,44 @@ export async function GET(request: NextRequest) {
           } catch {
             previewUrl = null
           }
-        } else {
-          status = (row.thumbnailStatus as ThumbnailStatus) ?? "pending"
-          const thumbnailBucket = row.thumbnailBucket || defaultThumbnailBucket
-          if (status === "ready" && row.thumbnailKey && thumbnailClient && thumbnailBucket) {
-            try {
-              previewUrl = await getSignedUrl(
-                thumbnailClient,
-                new GetObjectCommand({
-                  Bucket: thumbnailBucket,
-                  Key: row.thumbnailKey,
-                  ResponseContentDisposition: "inline",
-                  ResponseCacheControl: `public, max-age=${ttlSeconds}`,
-                }),
-                { expiresIn: ttlSeconds }
-              )
-            } catch {
-              previewUrl = null
-            }
+        } else if (
+          candidate.thumbnailStatus === "ready" &&
+          candidate.thumbnailKey &&
+          candidate.thumbnailBucket &&
+          thumbnailClient
+        ) {
+          try {
+            previewUrl = await getSignedUrl(
+              thumbnailClient,
+              new GetObjectCommand({
+                Bucket: candidate.thumbnailBucket,
+                Key: candidate.thumbnailKey,
+                ResponseContentDisposition: "inline",
+                ResponseCacheControl: `public, max-age=${ttlSeconds}`,
+              }),
+              { expiresIn: ttlSeconds }
+            )
+          } catch {
+            previewUrl = null
           }
         }
 
         return {
-          id: row.id,
-          key: row.key,
-          size: Number(row.size),
-          lastModified: row.lastModified.toISOString(),
-          extension: row.extension,
-          mediaType: media,
+          id: candidate.id,
+          key: candidate.key,
+          size: candidate.size,
+          lastModified: candidate.lastModified.toISOString(),
+          extension: candidate.extension,
+          mediaType: candidate.mediaType,
           previewUrl,
-          thumbnailStatus: status,
-          isVideo,
+          thumbnailStatus: candidate.thumbnailStatus,
+          isVideo: candidate.isVideo,
+          isFolder: false,
+          fileCount: undefined,
+          totalSize: undefined,
         }
       })
     )
-
-    const last = items[items.length - 1]
-    const nextCursor = hasMore && last
-      ? encodeCursor(new Date(last.lastModified), last.id)
-      : null
 
     await logUserAuditAction({
       userId: session.user.id,
@@ -227,6 +360,7 @@ export async function GET(request: NextRequest) {
         limit,
         returned: items.length,
         hasMore,
+        offset: start,
       },
       ...requestContext,
     })

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef } from "react"
-import { Download, Loader2, Trash2, Video } from "lucide-react"
+import { Download, FolderOpen, Loader2, Trash2, Video } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/dashboard/empty-state"
@@ -15,6 +15,7 @@ interface GalleryBrowserProps {
   selectedKeys: Set<string>
   onSelect: (item: GalleryItem) => void
   onSelectAllVisible: () => void
+  onNavigate: (item: GalleryItem) => void
   onOpenPreview: (item: GalleryItem) => void
   onDownload: (item: GalleryItem) => void
   onDelete: (item: GalleryItem) => void
@@ -46,6 +47,7 @@ export function GalleryBrowser({
   selectedKeys,
   onSelect,
   onSelectAllVisible,
+  onNavigate,
   onOpenPreview,
   onDownload,
   onDelete,
@@ -116,10 +118,25 @@ export function GalleryBrowser({
               <div className="relative">
                 <button
                   type="button"
-                  onClick={() => onOpenPreview(item)}
+                  onClick={() => {
+                    if (item.isFolder) {
+                      onNavigate(item)
+                    } else {
+                      onOpenPreview(item)
+                    }
+                  }}
                   className="block h-40 w-full overflow-hidden rounded-t-lg bg-muted"
                 >
-                  {item.previewUrl ? (
+                  {item.isFolder ? (
+                    <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
+                      <FolderOpen className="h-10 w-10" />
+                      <span className="text-xs">
+                        {typeof item.fileCount === "number"
+                          ? `${item.fileCount} ${item.fileCount === 1 ? "file" : "files"}`
+                          : "Folder"}
+                      </span>
+                    </div>
+                  ) : item.previewUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={item.previewUrl}
@@ -152,12 +169,20 @@ export function GalleryBrowser({
                   {getDisplayName(item.key)}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {formatSize(item.size)} • {formatDate(item.lastModified)}
+                  {item.isFolder
+                    ? `${typeof item.fileCount === "number" ? item.fileCount : 0} ${item.fileCount === 1 ? "file" : "files"} • ${formatDate(item.lastModified)}`
+                    : `${formatSize(item.size)} • ${formatDate(item.lastModified)}`}
                 </p>
                 <div className="flex items-center gap-1 pt-1">
-                  <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => onDownload(item)}>
-                    <Download className="h-3.5 w-3.5" />
-                  </Button>
+                  {item.isFolder ? (
+                    <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => onNavigate(item)}>
+                      <FolderOpen className="h-3.5 w-3.5" />
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => onDownload(item)}>
+                      <Download className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
                   <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => onDelete(item)}>
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>

@@ -27,10 +27,13 @@ export interface GalleryItem {
   size: number
   lastModified: string
   extension: string
-  mediaType: MediaType
+  mediaType: MediaType | null
   previewUrl: string | null
   thumbnailStatus: ThumbnailStatus
   isVideo: boolean
+  isFolder: boolean
+  fileCount?: number
+  totalSize?: number
 }
 
 export interface GalleryResponse {

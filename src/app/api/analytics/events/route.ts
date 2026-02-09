@@ -45,7 +45,7 @@ function getIpAddress(req: Request): string | null {
 }
 
 export async function POST(req: Request) {
-  const rl = rateLimitByIp(req, "analytics", 10)
+  const rl = rateLimitByIp(req, "analytics", 60)
   if (!rl.success) return rateLimitResponse(rl.retryAfterSeconds)
 
   const session = await auth()
