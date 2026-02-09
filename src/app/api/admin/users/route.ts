@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/db"
+import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
 
 export async function GET(req: Request) {
   const session = await auth()
   if (!session?.user?.id || session.user.role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
+
+  const rl = rateLimitByUser(session.user.id, "admin", 30)
+  if (!rl.success) return rateLimitResponse(rl.retryAfterSeconds)
 
   const { searchParams } = new URL(req.url)
   const page = parseInt(searchParams.get("page") ?? "1", 10)

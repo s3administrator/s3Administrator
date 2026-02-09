@@ -4,6 +4,7 @@ import { getS3Client } from "@/lib/s3"
 import { prisma } from "@/lib/db"
 import { rebuildUserExtensionStats } from "@/lib/file-stats"
 import { createFolderSchema } from "@/lib/validations"
+import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
 import { getRequestContext, logUserAuditAction } from "@/lib/audit-logger"
 import { PutObjectCommand } from "@aws-sdk/client-s3"
 
@@ -107,7 +108,6 @@ export async function POST(request: NextRequest) {
         ...requestContext,
       })
     }
-    const message = error instanceof Error ? error.message : "Failed to create folder"
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: "Failed to create folder" }, { status: 500 })
   }
 }

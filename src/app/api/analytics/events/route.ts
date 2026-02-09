@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/db"
+import { rateLimitByIp, rateLimitResponse } from "@/lib/rate-limit"
 import type { Prisma } from "@prisma/client"
 
 type IncomingEvent = {
@@ -44,6 +45,9 @@ function getIpAddress(req: Request): string | null {
 }
 
 export async function POST(req: Request) {
+  const rl = rateLimitByIp(req, "analytics", 10)
+  if (!rl.success) return rateLimitResponse(rl.retryAfterSeconds)
+
   const session = await auth()
 
   const body = await req.json().catch(() => null)

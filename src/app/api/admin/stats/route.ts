@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/db"
+import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
 
 function toNumber(value: bigint | number | string | null | undefined): number {
   if (value === null || value === undefined) return 0
@@ -16,6 +17,9 @@ export async function GET() {
   if (!session?.user?.id || session.user.role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
+
+  const rl = rateLimitByUser(session.user.id, "admin", 30)
+  if (!rl.success) return rateLimitResponse(rl.retryAfterSeconds)
 
   const now = new Date()
   const since24h = new Date(now.getTime() - 24 * 60 * 60 * 1000)

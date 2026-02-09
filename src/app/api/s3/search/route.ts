@@ -6,6 +6,7 @@ import {
   parseCsvValues,
   parseScopes,
 } from "@/lib/file-search"
+import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
 
 export async function GET(request: NextRequest) {
   try {
@@ -80,7 +81,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ results: data, total })
   } catch (error) {
     console.error("Failed to search files:", error)
-    const message = error instanceof Error ? error.message : "Failed to search files"
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: "Failed to search files" }, { status: 500 })
   }
 }

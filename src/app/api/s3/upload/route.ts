@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { getS3Client } from "@/lib/s3"
+import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
 import { getRequestContext, logUserAuditAction } from "@/lib/audit-logger"
+import { s3OperationSchema } from "@/lib/validations"
 import { PutObjectCommand } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 
@@ -19,16 +21,16 @@ export async function POST(request: NextRequest) {
     userId = session.user.id
 
     const body = await request.json()
-    const { bucket, key, credentialId } = body
-    auditBucket = typeof bucket === "string" ? bucket : ""
-    auditKey = typeof key === "string" ? key : ""
-
-    if (!bucket || !key) {
+    const parsed = s3OperationSchema.safeParse(body)
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "bucket and key are required" },
+        { error: "Invalid parameters" },
         { status: 400 }
       )
     }
+    const { bucket, key, credentialId } = parsed.data
+    auditBucket = bucket
+    auditKey = key
 
     const { client } = await getS3Client(session.user.id, credentialId)
 
@@ -48,7 +50,7 @@ export async function POST(request: NextRequest) {
       target: key,
       metadata: {
         bucket,
-        credentialId: typeof credentialId === "string" ? credentialId : null,
+        credentialId: credentialId ?? null,
       },
       ...requestContext,
     })
@@ -71,7 +73,6 @@ export async function POST(request: NextRequest) {
         ...requestContext,
       })
     }
-    const message = error instanceof Error ? error.message : "Failed to generate upload URL"
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: "Failed to generate upload URL" }, { status: 500 })
   }
 }

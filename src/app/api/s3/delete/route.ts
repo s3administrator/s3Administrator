@@ -4,6 +4,7 @@ import { getS3Client } from "@/lib/s3"
 import { prisma } from "@/lib/db"
 import { rebuildUserExtensionStats } from "@/lib/file-stats"
 import { deleteObjectsSchema } from "@/lib/validations"
+import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
 import { getRequestContext, logUserAuditAction } from "@/lib/audit-logger"
 import type { Prisma } from "@prisma/client"
 import {
@@ -277,7 +278,6 @@ export async function POST(request: NextRequest) {
         ...requestContext,
       })
     }
-    const message = error instanceof Error ? error.message : "Failed to delete objects"
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: "Failed to delete objects" }, { status: 500 })
   }
 }

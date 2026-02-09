@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/db"
 import { getS3Client } from "@/lib/s3"
+import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
 import { ListBucketsCommand } from "@aws-sdk/client-s3"
 
 export async function GET(request: NextRequest) {
@@ -68,7 +69,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ buckets: allBuckets })
   } catch (error) {
     console.error("Failed to list buckets:", error)
-    const message = error instanceof Error ? error.message : "Failed to list buckets"
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: "Failed to list buckets" }, { status: 500 })
   }
 }

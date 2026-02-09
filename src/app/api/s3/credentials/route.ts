@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db"
 import { rebuildUserExtensionStats } from "@/lib/file-stats"
 import { encrypt } from "@/lib/crypto"
 import { addCredentialSchema } from "@/lib/validations"
+import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
 
 export async function GET() {
   const session = await auth()

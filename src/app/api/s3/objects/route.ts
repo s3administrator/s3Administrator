@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/db"
 import { getS3Client } from "@/lib/s3"
 import { listObjectsSchema } from "@/lib/validations"
+import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
 
 export async function GET(request: NextRequest) {
   try {
@@ -92,7 +93,6 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error("Failed to list objects:", error)
-    const message = error instanceof Error ? error.message : "Failed to list objects"
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: "Failed to list objects" }, { status: 500 })
   }
 }

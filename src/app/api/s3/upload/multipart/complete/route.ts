@@ -99,7 +99,6 @@ export async function POST(request: NextRequest) {
         ...requestContext,
       })
     }
-    const message = error instanceof Error ? error.message : "Failed to complete multipart upload"
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: "Failed to complete multipart upload" }, { status: 500 })
   }
 }

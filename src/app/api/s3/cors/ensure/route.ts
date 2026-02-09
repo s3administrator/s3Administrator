@@ -6,6 +6,7 @@ import {
 } from "@aws-sdk/client-s3"
 import { auth } from "@/lib/auth"
 import { getS3Client } from "@/lib/s3"
+import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
 
 const UPLOAD_CORS_RULE_ID = "s3-admin-browser-upload"
 const REQUIRED_METHODS = ["GET", "HEAD", "PUT", "POST", "DELETE"]
@@ -58,6 +59,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "bucket is required" }, { status: 400 })
     }
 
+    if (!requestedOrigin) {
+      return NextResponse.json({ error: "origin is required" }, { status: 400 })
+    }
+
     const { client } = await getS3Client(session.user.id, credentialId)
 
     let existingRules: CORSRule[] = []
@@ -89,7 +94,7 @@ export async function POST(request: NextRequest) {
       ]),
       AllowedOrigins: uniqueStrings([
         ...(currentRule?.AllowedOrigins ?? []),
-        requestedOrigin || "*",
+        requestedOrigin,
       ]),
       MaxAgeSeconds: currentRule?.MaxAgeSeconds ?? 3600,
     }
@@ -113,12 +118,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       updated: true,
       bucket,
-      origin: requestedOrigin || "*",
+      origin: requestedOrigin,
       ruleId: UPLOAD_CORS_RULE_ID,
     })
   } catch (error) {
     console.error("Failed to ensure bucket CORS:", error)
-    const message = error instanceof Error ? error.message : "Failed to ensure bucket CORS"
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: "Failed to ensure bucket CORS" }, { status: 500 })
   }
 }

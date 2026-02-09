@@ -160,7 +160,6 @@ export async function GET() {
     })
   } catch (error) {
     console.error("Failed to build dashboard overview:", error)
-    const message = error instanceof Error ? error.message : "Failed to build dashboard overview"
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: "Failed to build dashboard overview" }, { status: 500 })
   }
 }

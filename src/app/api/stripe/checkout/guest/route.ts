@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { stripe } from "@/lib/stripe"
+import { rateLimitByIp, rateLimitResponse } from "@/lib/rate-limit"
 
 export async function POST(req: NextRequest) {
+  const rl = rateLimitByIp(req, "guest-checkout", 3)
+  if (!rl.success) return rateLimitResponse(rl.retryAfterSeconds)
+
   try {
     const { planId } = await req.json()
 
@@ -22,7 +26,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ url: checkoutSession.url })
   } catch (err) {
     console.error("Guest checkout error:", err)
-    const message = err instanceof Error ? err.message : "Checkout failed"
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: "Checkout failed" }, { status: 500 })
   }
 }

@@ -2,12 +2,16 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/db"
 import { stripe } from "@/lib/stripe"
+import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
 
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
+
+  const rl = rateLimitByUser(session.user.id, "checkout", 10)
+  if (!rl.success) return rateLimitResponse(rl.retryAfterSeconds)
 
   const { planId } = await req.json()
 

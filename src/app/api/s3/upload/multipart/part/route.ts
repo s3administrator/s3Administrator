@@ -45,7 +45,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ url })
   } catch (error) {
     console.error("Failed to create part upload URL:", error)
-    const message = error instanceof Error ? error.message : "Failed to create part upload URL"
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: "Failed to create part upload URL" }, { status: 500 })
   }
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/db"
 import { stripe } from "@/lib/stripe"
+import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
 import { z } from "zod/v4"
 
 const updateUserSchema = z.object({
@@ -17,6 +18,9 @@ export async function PATCH(
   if (!session?.user?.id || session.user.role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
+
+  const rl = rateLimitByUser(session.user.id, "admin", 30)
+  if (!rl.success) return rateLimitResponse(rl.retryAfterSeconds)
 
   const { id } = await params
   const body = await req.json()
@@ -42,6 +46,9 @@ export async function DELETE(
   if (!session?.user?.id || session.user.role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
+
+  const rl = rateLimitByUser(session.user.id, "admin", 30)
+  if (!rl.success) return rateLimitResponse(rl.retryAfterSeconds)
 
   const { id } = await params
 

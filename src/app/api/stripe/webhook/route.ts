@@ -37,8 +37,13 @@ export async function POST(req: NextRequest) {
       const session = event.data.object as Stripe.Checkout.Session
       const userId = session.metadata?.userId
       const planId = session.metadata?.planId
-      const tier = session.metadata?.tier
       const stripeSubId = session.subscription as string
+
+      // Resolve tier from plan lookup instead of trusting metadata
+      const resolvedPlan = planId
+        ? await prisma.plan.findUnique({ where: { id: planId } })
+        : null
+      const tier = resolvedPlan?.slug ?? session.metadata?.tier
 
       if (userId && tier && stripeSubId) {
         // Authenticated checkout — user already exists
@@ -72,7 +77,7 @@ export async function POST(req: NextRequest) {
             },
           })
         }
-      } else if (session.metadata?.guest === "true" && tier && stripeSubId && planId) {
+      } else if (session.metadata?.guest === "true" && tier && stripeSubId && resolvedPlan && planId) {
         // Guest checkout — find or create user from Stripe email
         const customerEmail = session.customer_details?.email
         const stripeCustomerId = session.customer as string
