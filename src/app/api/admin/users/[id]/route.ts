@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/db"
 import { stripe } from "@/lib/stripe"
 import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
+import { enforceThumbnailCachePolicyForUser } from "@/lib/thumbnail-cache-policy"
 import { z } from "zod/v4"
 
 const updateUserSchema = z.object({
@@ -34,6 +35,10 @@ export async function PATCH(
     data: parsed.data,
     select: { id: true, tier: true, role: true },
   })
+
+  if (parsed.data.tier !== undefined) {
+    await enforceThumbnailCachePolicyForUser(updated.id)
+  }
 
   return NextResponse.json(updated)
 }

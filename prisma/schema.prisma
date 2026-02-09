@@ -205,6 +205,7 @@ model Plan {
   bucketLimit   Int      @default(1)
   fileLimit     Int      @default(1000)
   features      String[] @default([])
+  thumbnailCache Boolean @default(false)
   isActive      Boolean  @default(true)
   sortOrder     Int      @default(0)
 

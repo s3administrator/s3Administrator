@@ -88,6 +88,52 @@ export async function deleteMediaThumbnailsForKeys(params: {
   return { deletedRows: rows.length, deletedObjects }
 }
 
+export async function purgeMediaThumbnailsForUser(params: { userId: string }) {
+  const rows = await prisma.mediaThumbnail.findMany({
+    where: {
+      userId: params.userId,
+    },
+    select: {
+      id: true,
+      thumbnailKey: true,
+    },
+  })
+
+  const thumbnailKeys = Array.from(
+    new Set(rows.map((row) => row.thumbnailKey).filter((value): value is string => Boolean(value)))
+  )
+
+  let deletedObjects = 0
+  if (thumbnailKeys.length > 0) {
+    try {
+      await deleteThumbnailObjects(thumbnailKeys)
+      deletedObjects = thumbnailKeys.length
+    } catch {
+      deletedObjects = 0
+    }
+  }
+
+  const deletedRows = await prisma.mediaThumbnail.deleteMany({
+    where: {
+      userId: params.userId,
+    },
+  })
+
+  const deletedTasks = await prisma.backgroundTask.deleteMany({
+    where: {
+      userId: params.userId,
+      type: "thumbnail_generate",
+      status: "pending",
+    },
+  })
+
+  return {
+    deletedRows: deletedRows.count,
+    deletedObjects,
+    deletedTasks: deletedTasks.count,
+  }
+}
+
 export async function moveMediaThumbnailForObject(params: {
   userId: string
   credentialId: string

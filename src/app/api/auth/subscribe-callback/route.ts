@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { stripe } from "@/lib/stripe"
 import { prisma } from "@/lib/db"
+import { enforceThumbnailCachePolicyForUser } from "@/lib/thumbnail-cache-policy"
 import { randomUUID, randomBytes } from "crypto"
 
 export async function GET(req: NextRequest) {
@@ -88,6 +89,8 @@ export async function GET(req: NextRequest) {
   if (!user) {
     return NextResponse.redirect(new URL("/pricing?error=account_creation_failed", req.url))
   }
+
+  await enforceThumbnailCachePolicyForUser(user.id)
 
   // Create Auth.js database session
   const sessionToken = randomUUID() + randomBytes(16).toString("hex")

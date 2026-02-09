@@ -14,6 +14,7 @@ import {
   uploadThumbnailObject,
 } from "@/lib/thumbnail-storage"
 import { deleteMediaThumbnailsForKeys } from "@/lib/media-thumbnails"
+import { isThumbnailCacheEnabledForUser } from "@/lib/thumbnail-cache-policy"
 import { logUserAuditAction } from "@/lib/audit-logger"
 
 const CHUNK_SIZE = 500
@@ -248,6 +249,48 @@ export async function POST() {
         return NextResponse.json({ processed: false, message: "Invalid thumbnail payload" })
       }
 
+      const thumbnailCacheEnabled = await isThumbnailCacheEnabledForUser(session.user.id)
+      if (!thumbnailCacheEnabled) {
+        await deleteMediaThumbnailsForKeys({
+          userId: session.user.id,
+          credentialId: thumbnailPayload.credentialId,
+          bucket: thumbnailPayload.bucket,
+          keys: [thumbnailPayload.key],
+        })
+
+        await prisma.backgroundTask.update({
+          where: { id: candidate.id },
+          data: {
+            status: "completed",
+            attempts: 0,
+            completedAt: new Date(),
+            nextRunAt: new Date(),
+            lastError: null,
+          },
+        })
+
+        await logUserAuditAction({
+          userId: session.user.id,
+          eventType: "s3_action",
+          eventName: "thumbnail_generate_skipped",
+          path: "/api/tasks/process",
+          method: "POST",
+          target: thumbnailPayload.key,
+          metadata: {
+            bucket: thumbnailPayload.bucket,
+            credentialId: thumbnailPayload.credentialId,
+            reason: "thumbnail_cache_disabled_for_plan",
+          },
+        })
+
+        return NextResponse.json({
+          processed: true,
+          taskId: candidate.id,
+          done: true,
+          skipped: "thumbnail_cache_disabled",
+        })
+      }
+
       const { client } = await getS3Client(session.user.id, thumbnailPayload.credentialId)
       const sourceFile = await prisma.fileMetadata.findFirst({
         where: {
@@ -379,6 +422,34 @@ export async function POST() {
         maxWidth: getThumbnailMaxWidth(),
         timeoutMs: THUMBNAIL_TIMEOUT_MS,
       })
+
+      const stillEnabled = await isThumbnailCacheEnabledForUser(session.user.id)
+      if (!stillEnabled) {
+        await deleteMediaThumbnailsForKeys({
+          userId: session.user.id,
+          credentialId: thumbnailPayload.credentialId,
+          bucket: thumbnailPayload.bucket,
+          keys: [thumbnailPayload.key],
+        })
+
+        await prisma.backgroundTask.update({
+          where: { id: candidate.id },
+          data: {
+            status: "completed",
+            attempts: 0,
+            completedAt: new Date(),
+            nextRunAt: new Date(),
+            lastError: null,
+          },
+        })
+
+        return NextResponse.json({
+          processed: true,
+          taskId: candidate.id,
+          done: true,
+          skipped: "thumbnail_cache_disabled",
+        })
+      }
 
       await uploadThumbnailObject({
         key: thumbnailKey,

@@ -13,6 +13,7 @@ export async function GET() {
       bucketLimit: true,
       fileLimit: true,
       features: true,
+      thumbnailCache: true,
       stripePriceId: true,
     },
   })

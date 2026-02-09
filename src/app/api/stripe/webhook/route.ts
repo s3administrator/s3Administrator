@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { stripe } from "@/lib/stripe"
 import { prisma } from "@/lib/db"
+import { enforceThumbnailCachePolicyForUser } from "@/lib/thumbnail-cache-policy"
 import Stripe from "stripe"
 
 export async function POST(req: NextRequest) {
@@ -77,6 +78,8 @@ export async function POST(req: NextRequest) {
             },
           })
         }
+
+        await enforceThumbnailCachePolicyForUser(userId)
       } else if (session.metadata?.guest === "true" && tier && stripeSubId && resolvedPlan && planId) {
         // Guest checkout — find or create user from Stripe email
         const customerEmail = session.customer_details?.email
@@ -148,6 +151,8 @@ export async function POST(req: NextRequest) {
               currentPeriodEnd: period.end,
             },
           })
+
+          await enforceThumbnailCachePolicyForUser(user.id)
         }
       }
       break
@@ -209,6 +214,8 @@ export async function POST(req: NextRequest) {
             data: subData,
           })
         }
+
+        await enforceThumbnailCachePolicyForUser(user.id)
       }
       break
     }
@@ -216,6 +223,10 @@ export async function POST(req: NextRequest) {
     case "customer.subscription.deleted": {
       const subscription = event.data.object as Stripe.Subscription
       const customerId = subscription.customer as string
+      const affectedUsers = await prisma.user.findMany({
+        where: { stripeCustomerId: customerId },
+        select: { id: true },
+      })
 
       await prisma.user.updateMany({
         where: { stripeCustomerId: customerId },
@@ -226,6 +237,10 @@ export async function POST(req: NextRequest) {
         where: { stripeSubscriptionId: subscription.id },
         data: { status: "canceled" },
       })
+
+      for (const affectedUser of affectedUsers) {
+        await enforceThumbnailCachePolicyForUser(affectedUser.id)
+      }
       break
     }
   }

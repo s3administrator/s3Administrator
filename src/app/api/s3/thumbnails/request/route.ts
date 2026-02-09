@@ -7,6 +7,7 @@ import { thumbnailRequestSchema } from "@/lib/validations"
 import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
 import { buildThumbnailObjectKey, getThumbnailBucketName } from "@/lib/thumbnail-storage"
 import { queueThumbnailTasks } from "@/lib/media-thumbnails"
+import { enforceThumbnailCachePolicyForUser } from "@/lib/thumbnail-cache-policy"
 import { getRequestContext, logUserAuditAction } from "@/lib/audit-logger"
 
 export async function POST(request: NextRequest) {
@@ -38,6 +39,37 @@ export async function POST(request: NextRequest) {
     const { bucket, credentialId, keys } = parsed.data
     auditBucket = bucket
     const dedupedKeys = Array.from(new Set(keys))
+
+    const policy = await enforceThumbnailCachePolicyForUser(session.user.id)
+    if (!policy.enabled) {
+      await logUserAuditAction({
+        userId: session.user.id,
+        eventType: "s3_action",
+        eventName: "thumbnail_request_blocked",
+        path: "/api/s3/thumbnails/request",
+        method: "POST",
+        target: bucket,
+        metadata: {
+          bucket,
+          requested: dedupedKeys.length,
+          reason: "thumbnail_cache_disabled_for_plan",
+          purged: policy.purged,
+          purgedRows: policy.deletedRows,
+          purgedObjects: policy.deletedObjects,
+          purgedTasks: policy.deletedTasks,
+        },
+        ...requestContext,
+      })
+
+      return NextResponse.json({
+        accepted: 0,
+        queued: 0,
+        skipped: dedupedKeys.length,
+        disabled: true,
+        reason: "thumbnail_cache_disabled_for_plan",
+      })
+    }
+
     const { credential } = await getS3Client(session.user.id, credentialId)
 
     const files = await prisma.fileMetadata.findMany({

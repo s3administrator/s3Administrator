@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Dialog,
@@ -34,6 +35,7 @@ interface Plan {
   bucketLimit: number
   fileLimit: number
   features: string[]
+  thumbnailCache: boolean
   isActive: boolean
   sortOrder: number
   _count: { subscriptions: number }
@@ -54,6 +56,7 @@ function PlanForm({
   const [bucketLimit, setBucketLimit] = useState(plan?.bucketLimit?.toString() ?? "1")
   const [fileLimit, setFileLimit] = useState(plan?.fileLimit?.toString() ?? "1000")
   const [features, setFeatures] = useState(plan?.features?.join("\n") ?? "")
+  const [thumbnailCache, setThumbnailCache] = useState(plan?.thumbnailCache ?? false)
   const [sortOrder, setSortOrder] = useState(plan?.sortOrder?.toString() ?? "0")
   const [saving, setSaving] = useState(false)
 
@@ -68,6 +71,7 @@ function PlanForm({
         bucketLimit: parseInt(bucketLimit, 10),
         fileLimit: parseInt(fileLimit, 10),
         features: features.split("\n").map((f) => f.trim()).filter(Boolean),
+        thumbnailCache,
         sortOrder: parseInt(sortOrder, 10),
       }
 
@@ -175,6 +179,14 @@ function PlanForm({
             value={sortOrder}
             onChange={(e) => setSortOrder(e.target.value)}
           />
+          <label className="mt-4 flex items-center gap-2 text-sm">
+            <Checkbox
+              checked={thumbnailCache}
+              onCheckedChange={(checked) => setThumbnailCache(checked === true)}
+              aria-label="Enable thumbnail cache"
+            />
+            Enable thumbnail cache
+          </label>
         </div>
       </div>
 
@@ -279,6 +291,7 @@ export default function AdminPlansPage() {
                 <TableHead>Name</TableHead>
                 <TableHead>Price</TableHead>
                 <TableHead>Limits</TableHead>
+                <TableHead>Thumb Cache</TableHead>
                 <TableHead>Subs</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -298,6 +311,11 @@ export default function AdminPlansPage() {
                   <TableCell className="text-xs text-muted-foreground">
                     {plan.bucketLimit === 0 ? "∞" : plan.bucketLimit} buckets,{" "}
                     {plan.fileLimit === 0 ? "∞" : plan.fileLimit.toLocaleString()} files
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={plan.thumbnailCache ? "default" : "secondary"}>
+                      {plan.thumbnailCache ? "On" : "Off"}
+                    </Badge>
                   </TableCell>
                   <TableCell>{plan._count.subscriptions}</TableCell>
                   <TableCell>
@@ -365,7 +383,7 @@ export default function AdminPlansPage() {
               ))}
               {plans.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground">
+                  <TableCell colSpan={9} className="text-center text-muted-foreground">
                     No plans yet. Create one to get started.
                   </TableCell>
                 </TableRow>

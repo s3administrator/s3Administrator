@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/db"
 import { stripe } from "@/lib/stripe"
 import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
+import { enforceThumbnailCachePolicyForUser } from "@/lib/thumbnail-cache-policy"
 import { z } from "zod/v4"
 
 const updatePlanSchema = z.object({
@@ -11,6 +12,7 @@ const updatePlanSchema = z.object({
   bucketLimit: z.number().int().min(0).optional(),
   fileLimit: z.number().int().min(0).optional(),
   features: z.array(z.string()).optional(),
+  thumbnailCache: z.boolean().optional(),
   isActive: z.boolean().optional(),
   sortOrder: z.number().int().optional(),
 })
@@ -83,6 +85,37 @@ export async function PATCH(
     where: { id },
     data,
   })
+
+  if (
+    parsed.data.thumbnailCache !== undefined &&
+    parsed.data.thumbnailCache !== plan.thumbnailCache
+  ) {
+    const [tierUsers, subscriptionUsers] = await Promise.all([
+      prisma.user.findMany({
+        where: { tier: updated.slug },
+        select: { id: true },
+      }),
+      prisma.subscription.findMany({
+        where: {
+          planId: updated.id,
+          status: { in: ["active", "trialing", "past_due"] },
+        },
+        select: { userId: true },
+      }),
+    ])
+
+    const affectedUserIds = new Set<string>()
+    for (const user of tierUsers) {
+      affectedUserIds.add(user.id)
+    }
+    for (const subscription of subscriptionUsers) {
+      affectedUserIds.add(subscription.userId)
+    }
+
+    for (const userId of affectedUserIds) {
+      await enforceThumbnailCachePolicyForUser(userId)
+    }
+  }
 
   return NextResponse.json({ plan: updated })
 }
