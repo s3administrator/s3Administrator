@@ -40,6 +40,7 @@ import {
   ArrowUpDown,
   FileSearch,
   ListTodo,
+  Activity,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ThemeSwitcher } from "@/components/theme-switcher"
@@ -440,6 +441,17 @@ export function Sidebar() {
           >
             <FileSearch className="h-4 w-4" />
             Search All Files
+          </Link>
+
+          <Link
+            href="/audit-logs"
+            className={cn(
+              "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent",
+              pathname === "/audit-logs" && "bg-accent"
+            )}
+          >
+            <Activity className="h-4 w-4" />
+            Audit Logs
           </Link>
 
           <div className="rounded-md border p-2">
