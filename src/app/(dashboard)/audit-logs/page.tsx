@@ -331,6 +331,7 @@ export default function AuditLogsPage() {
                         <SelectItem value="click">click</SelectItem>
                         <SelectItem value="form_submit">form_submit</SelectItem>
                         <SelectItem value="api_call">api_call</SelectItem>
+                        <SelectItem value="s3_action">s3_action</SelectItem>
                         <SelectItem value="auth">auth</SelectItem>
                         <SelectItem value="error">error</SelectItem>
                       </SelectContent>
@@ -468,4 +469,3 @@ export default function AuditLogsPage() {
     </div>
   )
 }
-

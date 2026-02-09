@@ -4,6 +4,7 @@ import { getS3Client } from "@/lib/s3"
 import { prisma } from "@/lib/db"
 import { getObjectExtension, rebuildUserExtensionStats } from "@/lib/file-stats"
 import { moveObjectSchema } from "@/lib/validations"
+import { getRequestContext, logUserAuditAction } from "@/lib/audit-logger"
 import {
   CopyObjectCommand,
   DeleteObjectCommand,
@@ -11,11 +12,18 @@ import {
 } from "@aws-sdk/client-s3"
 
 export async function POST(request: NextRequest) {
+  let userId: string | undefined
+  let auditBucket = ""
+  let auditSourceBucket = ""
+  let auditOperationCount = 0
+  const requestContext = getRequestContext(request)
+
   try {
     const session = await auth()
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+    userId = session.user.id
 
     const body = await request.json()
     const parsed = moveObjectSchema.safeParse(body)
@@ -29,6 +37,9 @@ export async function POST(request: NextRequest) {
 
     const { bucket, credentialId, sourceBucket, operations } = parsed.data
     const fromBucket = sourceBucket ?? bucket
+    auditBucket = bucket
+    auditSourceBucket = fromBucket
+    auditOperationCount = operations.length
     const { client, credential } = await getS3Client(session.user.id, credentialId)
 
     let movedCount = 0
@@ -132,9 +143,43 @@ export async function POST(request: NextRequest) {
 
     await rebuildUserExtensionStats(session.user.id)
 
+    await logUserAuditAction({
+      userId: session.user.id,
+      eventType: "s3_action",
+      eventName: "move",
+      path: "/api/s3/move",
+      method: "POST",
+      target: bucket,
+      metadata: {
+        bucket,
+        fromBucket,
+        credentialId: credential.id,
+        operations: operations.length,
+        moved: movedCount,
+      },
+      ...requestContext,
+    })
+
     return NextResponse.json({ moved: movedCount })
   } catch (error) {
     console.error("Failed to move objects:", error)
+    if (userId) {
+      await logUserAuditAction({
+        userId,
+        eventType: "s3_action",
+        eventName: "move_failed",
+        path: "/api/s3/move",
+        method: "POST",
+        target: auditBucket || undefined,
+        metadata: {
+          bucket: auditBucket || null,
+          fromBucket: auditSourceBucket || null,
+          operations: auditOperationCount,
+          error: error instanceof Error ? error.message : "move_failed",
+        },
+        ...requestContext,
+      })
+    }
     const message = error instanceof Error ? error.message : "Failed to move objects"
     return NextResponse.json({ error: message }, { status: 500 })
   }

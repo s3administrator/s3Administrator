@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/db"
 import { getS3Client } from "@/lib/s3"
 import { getObjectExtension, rebuildUserExtensionStats } from "@/lib/file-stats"
+import { getRequestContext, logUserAuditAction } from "@/lib/audit-logger"
 
 interface UploadCompleteItem {
   key: string
@@ -11,16 +12,24 @@ interface UploadCompleteItem {
 }
 
 export async function POST(request: NextRequest) {
+  let userId: string | undefined
+  let auditBucket = ""
+  let auditItemsCount = 0
+  const requestContext = getRequestContext(request)
+
   try {
     const session = await auth()
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+    userId = session.user.id
 
     const body = await request.json()
     const bucket = typeof body?.bucket === "string" ? body.bucket : ""
     const credentialId = typeof body?.credentialId === "string" ? body.credentialId : undefined
     const items = Array.isArray(body?.items) ? (body.items as UploadCompleteItem[]) : []
+    auditBucket = bucket
+    auditItemsCount = items.length
 
     if (!bucket || items.length === 0) {
       return NextResponse.json(
@@ -65,9 +74,40 @@ export async function POST(request: NextRequest) {
 
     await rebuildUserExtensionStats(session.user.id)
 
+    await logUserAuditAction({
+      userId: session.user.id,
+      eventType: "s3_action",
+      eventName: "upload_finalize",
+      path: "/api/s3/upload/complete",
+      method: "POST",
+      target: bucket,
+      metadata: {
+        bucket,
+        credentialId: credential.id,
+        items: items.length,
+      },
+      ...requestContext,
+    })
+
     return NextResponse.json({ updated: items.length })
   } catch (error) {
     console.error("Failed to finalize uploaded metadata:", error)
+    if (userId) {
+      await logUserAuditAction({
+        userId,
+        eventType: "s3_action",
+        eventName: "upload_finalize_failed",
+        path: "/api/s3/upload/complete",
+        method: "POST",
+        target: auditBucket || undefined,
+        metadata: {
+          bucket: auditBucket || null,
+          items: auditItemsCount,
+          error: error instanceof Error ? error.message : "upload_finalize_failed",
+        },
+        ...requestContext,
+      })
+    }
     const message = error instanceof Error ? error.message : "Failed to finalize uploaded metadata"
     return NextResponse.json({ error: message }, { status: 500 })
   }

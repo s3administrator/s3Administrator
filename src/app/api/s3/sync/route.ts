@@ -4,17 +4,24 @@ import { getS3Client } from "@/lib/s3"
 import { prisma } from "@/lib/db"
 import { getObjectExtension, rebuildUserExtensionStats } from "@/lib/file-stats"
 import { getTierLimits } from "@/lib/tiers"
+import { getRequestContext, logUserAuditAction } from "@/lib/audit-logger"
 import { ListObjectsV2Command } from "@aws-sdk/client-s3"
 
 export async function POST(request: NextRequest) {
+  let userId: string | undefined
+  let auditBucket = ""
+  const requestContext = getRequestContext(request)
+
   try {
     const session = await auth()
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+    userId = session.user.id
 
     const body = await request.json()
     const { bucket, credentialId } = body
+    auditBucket = bucket
 
     if (!bucket) {
       return NextResponse.json(
@@ -141,9 +148,40 @@ export async function POST(request: NextRequest) {
 
     await rebuildUserExtensionStats(session.user.id)
 
+    await logUserAuditAction({
+      userId: session.user.id,
+      eventType: "s3_action",
+      eventName: "sync",
+      path: "/api/s3/sync",
+      method: "POST",
+      target: `${bucket}`,
+      metadata: {
+        bucket,
+        credentialId: credential.id,
+        synced,
+        totalInS3,
+        staleRemoved: staleIds.length,
+      },
+      ...requestContext,
+    })
+
     return NextResponse.json({ synced, total: totalInS3 })
   } catch (error) {
     console.error("Failed to sync metadata:", error)
+    if (userId) {
+      await logUserAuditAction({
+        userId,
+        eventType: "s3_action",
+        eventName: "sync_failed",
+        path: "/api/s3/sync",
+        method: "POST",
+        target: auditBucket || undefined,
+        metadata: {
+          error: error instanceof Error ? error.message : "sync_failed",
+        },
+        ...requestContext,
+      })
+    }
     const message = error instanceof Error ? error.message : "Failed to sync metadata"
     return NextResponse.json({ error: message }, { status: 500 })
   }

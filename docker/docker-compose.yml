@@ -31,6 +31,9 @@ services:
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
       - ADMIN_EMAILS=${ADMIN_EMAILS}
+      - SYSTEM_LOG_FILE_PATH=${SYSTEM_LOG_FILE_PATH:-/app/logs/system.log}
+    volumes:
+      - app_logs:/app/logs
     depends_on:
       db:
         condition: service_healthy
@@ -89,3 +92,4 @@ volumes:
   pgdata:
   caddy_data:
   caddy_config:
+  app_logs:

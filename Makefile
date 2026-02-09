@@ -1,7 +1,18 @@
-.PHONY: prod-setup prod-start prod-stop prod-restart prod-migrate dev-start dev-stop dev-reset
+.PHONY: help prod-setup prod-start prod-stop prod-restart prod-migrate dev-start dev-stop dev-reset
 
 DC_DEV  = docker compose --env-file .env.dev -f docker/docker-compose.yml
 DC_PROD = docker compose --env-file .env.prod -f docker/docker-compose.yml
+
+help: ## Show available commands
+	@echo ""
+	@echo "  Production"
+	@echo "  ──────────────────────────────────────"
+	@grep -E '^prod-[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
+	@echo ""
+	@echo "  Development"
+	@echo "  ──────────────────────────────────────"
+	@grep -E '^dev-[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
+	@echo ""
 
 # ─── Production ──────────────────────────────────────────
 

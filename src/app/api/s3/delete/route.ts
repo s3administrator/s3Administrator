@@ -4,6 +4,7 @@ import { getS3Client } from "@/lib/s3"
 import { prisma } from "@/lib/db"
 import { rebuildUserExtensionStats } from "@/lib/file-stats"
 import { deleteObjectsSchema } from "@/lib/validations"
+import { getRequestContext, logUserAuditAction } from "@/lib/audit-logger"
 import type { Prisma } from "@prisma/client"
 import {
   DeleteObjectsCommand,
@@ -81,11 +82,16 @@ async function batchDeleteObjects(
 }
 
 export async function POST(request: NextRequest) {
+  let userId: string | undefined
+  let auditBucket = ""
+  const requestContext = getRequestContext(request)
+
   try {
     const session = await auth()
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+    userId = session.user.id
 
     const body = await request.json()
     const parsed = deleteObjectsSchema.safeParse(body)
@@ -98,6 +104,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { bucket, credentialId, keys, prefixes, dryRun } = parsed.data
+    auditBucket = bucket
     const { client, credential } = await getS3Client(session.user.id, credentialId)
 
     if (dryRun) {
@@ -236,9 +243,40 @@ export async function POST(request: NextRequest) {
 
     await rebuildUserExtensionStats(session.user.id)
 
+    await logUserAuditAction({
+      userId: session.user.id,
+      eventType: "s3_action",
+      eventName: "delete",
+      path: "/api/s3/delete",
+      method: "POST",
+      target: bucket,
+      metadata: {
+        bucket,
+        credentialId: credential.id,
+        deleted: totalDeleted,
+        keysRequested: keys?.length ?? 0,
+        prefixesRequested: prefixes?.length ?? 0,
+      },
+      ...requestContext,
+    })
+
     return NextResponse.json({ deleted: totalDeleted })
   } catch (error) {
     console.error("Failed to delete objects:", error)
+    if (userId) {
+      await logUserAuditAction({
+        userId,
+        eventType: "s3_action",
+        eventName: "delete_failed",
+        path: "/api/s3/delete",
+        method: "POST",
+        target: auditBucket || undefined,
+        metadata: {
+          error: error instanceof Error ? error.message : "delete_failed",
+        },
+        ...requestContext,
+      })
+    }
     const message = error instanceof Error ? error.message : "Failed to delete objects"
     return NextResponse.json({ error: message }, { status: 500 })
   }

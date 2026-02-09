@@ -4,14 +4,21 @@ import { getS3Client } from "@/lib/s3"
 import { prisma } from "@/lib/db"
 import { rebuildUserExtensionStats } from "@/lib/file-stats"
 import { createFolderSchema } from "@/lib/validations"
+import { getRequestContext, logUserAuditAction } from "@/lib/audit-logger"
 import { PutObjectCommand } from "@aws-sdk/client-s3"
 
 export async function POST(request: NextRequest) {
+  let userId: string | undefined
+  let auditBucket = ""
+  let auditFolderKey = ""
+  const requestContext = getRequestContext(request)
+
   try {
     const session = await auth()
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+    userId = session.user.id
 
     const body = await request.json()
     const parsed = createFolderSchema.safeParse(body)
@@ -24,10 +31,12 @@ export async function POST(request: NextRequest) {
     }
 
     const { bucket, credentialId, key } = parsed.data
+    auditBucket = bucket
     const { client, credential } = await getS3Client(session.user.id, credentialId)
 
     // Ensure key ends with /
     const folderKey = key.endsWith("/") ? key : `${key}/`
+    auditFolderKey = folderKey
 
     await client.send(
       new PutObjectCommand({
@@ -64,9 +73,40 @@ export async function POST(request: NextRequest) {
 
     await rebuildUserExtensionStats(session.user.id)
 
+    await logUserAuditAction({
+      userId: session.user.id,
+      eventType: "s3_action",
+      eventName: "create_folder",
+      path: "/api/s3/folder",
+      method: "POST",
+      target: folderKey,
+      metadata: {
+        bucket,
+        credentialId: credential.id,
+        key: folderKey,
+      },
+      ...requestContext,
+    })
+
     return NextResponse.json({ key: folderKey })
   } catch (error) {
     console.error("Failed to create folder:", error)
+    if (userId) {
+      await logUserAuditAction({
+        userId,
+        eventType: "s3_action",
+        eventName: "create_folder_failed",
+        path: "/api/s3/folder",
+        method: "POST",
+        target: auditFolderKey || undefined,
+        metadata: {
+          bucket: auditBucket || null,
+          key: auditFolderKey || null,
+          error: error instanceof Error ? error.message : "create_folder_failed",
+        },
+        ...requestContext,
+      })
+    }
     const message = error instanceof Error ? error.message : "Failed to create folder"
     return NextResponse.json({ error: message }, { status: 500 })
   }
