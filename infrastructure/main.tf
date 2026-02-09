@@ -53,7 +53,8 @@ locals {
     "# --- Managed production overrides ---",
     "ENVIRONMENT=\"PROD\"",
     "AUTH_URL=\"https://${var.domain}\"",
-    "DATABASE_URL=\"postgresql://${var.postgres_user}:${local.postgres_password}@localhost:5432/${var.postgres_db}\"",
+    "DATABASE_URL=\"postgresql://${var.postgres_user}:${local.postgres_password}@localhost:${var.postgres_host_port}/${var.postgres_db}\"",
+    "POSTGRES_PORT=\"${var.postgres_host_port}\"",
     "POSTGRES_PASSWORD=\"${local.postgres_password}\"",
     local.github_client_id_prod_from_typo != "" ? "GITHUB_CLIENT_ID_PROD=\"${local.github_client_id_prod_from_typo}\"" : "",
     local.stripe_api_key_fallback != "" ? "STRIPE_SECRET_KEY=\"${local.stripe_api_key_fallback}\"" : "",
@@ -121,12 +122,13 @@ resource "hcloud_server" "prod" {
   ssh_keys    = [local.selected_ssh_key_id]
 
   user_data = templatefile("${path.module}/templates/cloud-init.yaml.tftpl", {
-    app_branch      = var.app_branch
-    app_directory   = var.app_directory
-    app_env_content = local.app_env_prod
-    app_repo        = var.app_repo
-    domain          = var.domain
-    github_token    = var.github_token
+    app_branch         = var.app_branch
+    app_directory      = var.app_directory
+    app_env_content    = local.app_env_prod
+    app_repo           = var.app_repo
+    domain             = var.domain
+    github_token       = var.github_token
+    node_major_version = var.node_major_version
   })
 }
 

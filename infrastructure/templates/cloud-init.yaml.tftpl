@@ -7,6 +7,7 @@ packages:
   - git
   - gnupg
   - lsb-release
+  - make
   - ufw
 
 write_files:
@@ -28,6 +29,22 @@ write_files:
         curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/apt/sources.list.d/caddy-stable.list
         apt-get update
         apt-get install -y caddy
+      fi
+
+      REQUIRED_NODE_MAJOR="${node_major_version}"
+      NEED_NODE_INSTALL=0
+      if ! command -v node >/dev/null 2>&1; then
+        NEED_NODE_INSTALL=1
+      else
+        CURRENT_NODE_MAJOR="$(node -v | sed -E 's/^v([0-9]+).*/\1/')"
+        if [ "$${CURRENT_NODE_MAJOR}" -lt "$${REQUIRED_NODE_MAJOR}" ]; then
+          NEED_NODE_INSTALL=1
+        fi
+      fi
+
+      if [ "$${NEED_NODE_INSTALL}" -eq 1 ]; then
+        curl -fsSL "https://deb.nodesource.com/setup_${node_major_version}.x" | bash -
+        apt-get install -y nodejs
       fi
 
       systemctl enable --now docker
@@ -61,8 +78,7 @@ write_files:
       systemctl restart caddy
 
       cd "${app_directory}"
-      docker compose -f docker/docker-compose.yml pull || true
-      docker compose -f docker/docker-compose.yml up -d --build --remove-orphans
+      make prod
 
       cat > /etc/systemd/system/s3administrator.service <<'SERVICEEOF'
       [Unit]

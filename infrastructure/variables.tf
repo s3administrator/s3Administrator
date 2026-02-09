@@ -113,6 +113,18 @@ variable "postgres_db" {
   default     = "s3_admin"
 }
 
+variable "postgres_host_port" {
+  description = "Postgres port exposed on host (docker compose db service)"
+  type        = number
+  default     = 5433
+}
+
+variable "node_major_version" {
+  description = "Node.js major version to install on the server host for local tooling commands"
+  type        = number
+  default     = 22
+}
+
 variable "postgres_password" {
   description = "Postgres password (leave empty to auto-generate)"
   type        = string

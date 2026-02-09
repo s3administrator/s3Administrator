@@ -1,22 +1,26 @@
-.PHONY: help dev build start db-up db-down db-reset migrate generate studio lint clean docker-build docker-up docker-down nuke setup seed
+.PHONY: help check-node dev build start db-up db-down db-reset migrate generate studio lint clean docker-build docker-up docker-down nuke setup seed wait-db prod prod-check prod-migrate prod-seed
 
 DC = docker compose --env-file .env -f docker/docker-compose.yml
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
+check-node: ## Ensure local Node.js version meets Next.js requirements (>=20.9.0)
+	@command -v node >/dev/null 2>&1 || { echo "ERROR: Node.js >=20.9.0 is required but 'node' is not installed."; exit 1; }
+	@node -e 'const [major, minor] = process.versions.node.split(".").map(Number); if (major < 20 || (major === 20 && minor < 9)) { console.error("ERROR: Node.js " + process.version + " detected. Required >=20.9.0."); process.exit(1); }'
+
 # ─── Development ─────────────────────────────────────────
 
-dev: ## Start development server
+dev: check-node ## Start development server
 	npm run dev
 
-build: ## Build for production
+build: check-node ## Build for production
 	npx prisma generate && npm run build
 
-start: ## Start production server
+start: check-node ## Start production server
 	npm run start
 
-lint: ## Run linter
+lint: check-node ## Run linter
 	npm run lint
 
 # ─── Database ────────────────────────────────────────────
@@ -27,22 +31,22 @@ db-up: ## Start PostgreSQL via Docker Compose
 db-down: ## Stop PostgreSQL
 	$(DC) down
 
-db-reset: ## Reset database (drop all tables and re-migrate)
+db-reset: check-node ## Reset database (drop all tables and re-migrate)
 	npx prisma migrate reset --force
 
-migrate: ## Run database migrations
+migrate: check-node ## Run database migrations
 	npx prisma migrate dev
 
-migrate-deploy: ## Deploy migrations (production)
+migrate-deploy: check-node ## Deploy migrations (production)
 	npx prisma migrate deploy
 
-generate: ## Generate Prisma client
+generate: check-node ## Generate Prisma client
 	npx prisma generate
 
-studio: ## Open Prisma Studio (DB GUI)
+studio: check-node ## Open Prisma Studio (DB GUI)
 	npx prisma studio
 
-seed: ## Seed the database with default plans
+seed: check-node ## Seed the database with default plans
 	npx prisma db seed
 
 # ─── Docker Production ───────────────────────────────────
@@ -63,13 +67,37 @@ docker-down: ## Stop all services
 docker-logs: ## View app logs
 	$(DC) logs -f app
 
+wait-db: ## Wait until PostgreSQL is ready
+	@echo "Waiting for PostgreSQL to be ready..."
+	@until $(DC) exec -T db pg_isready -U s3admin -d s3_admin -q 2>/dev/null; do sleep 1; done
+
+prod-check: ## Validate production safety checks
+	@. ./.env 2>/dev/null; \
+	if [ "$$ENVIRONMENT" = "PROD" ] && [ "$$POSTGRES_PASSWORD" = "password" ]; then \
+		echo "ERROR: Cannot start PROD with default POSTGRES_PASSWORD. Set a strong password in .env"; exit 1; \
+	fi
+
+prod: prod-check docker-build ## Build image, start db, apply migrations+seed, then start app
+	$(DC) up -d db
+	$(MAKE) wait-db
+	$(MAKE) prod-migrate
+	$(MAKE) prod-seed
+	$(DC) up -d app
+	@echo "\n✓ Production stack is up and seeded."
+
+prod-migrate: ## Run Prisma migrate deploy inside app container
+	$(DC) run --rm -T app npx prisma migrate deploy
+
+prod-seed: ## Seed default plans inside app container
+	$(DC) run --rm -T app npx prisma db seed
+
 # ─── Setup & Cleanup ────────────────────────────────────
 
-setup: ## Full project setup: install deps, start db, migrate, seed
+setup: check-node ## Full project setup: install deps, start db, migrate, seed
 	npm install
 	$(DC) up db -d
 	@echo "Waiting for PostgreSQL to be ready..."
-	@until $(DC) exec db pg_isready -U s3admin -d s3_admin -q 2>/dev/null; do sleep 1; done
+	@until $(DC) exec -T db pg_isready -U s3admin -d s3_admin -q 2>/dev/null; do sleep 1; done
 	npx prisma migrate dev
 	npx prisma db seed
 	@echo "\n✓ Setup complete. Run 'make dev' to start the dev server."
