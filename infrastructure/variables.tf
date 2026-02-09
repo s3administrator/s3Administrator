@@ -66,9 +66,9 @@ variable "app_directory" {
 }
 
 variable "local_app_env_path" {
-  description = "Path (relative to infrastructure/) to local app .env file used as base for server .env"
+  description = "Path (relative to infrastructure/) to local app .env.prod file used as base for server .env"
   type        = string
-  default     = "../.env"
+  default     = "../.env.prod"
 }
 
 variable "domain" {

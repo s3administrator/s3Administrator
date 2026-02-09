@@ -1,54 +1,63 @@
-.PHONY: setup prod-run dev-run stop reset-dev migrate restart
+.PHONY: prod-setup prod-start prod-stop prod-restart prod-migrate dev-start dev-stop dev-reset
 
-DC = docker compose --env-file .env -f docker/docker-compose.yml
+DC_DEV  = docker compose --env-file .env.dev -f docker/docker-compose.yml
+DC_PROD = docker compose --env-file .env.prod -f docker/docker-compose.yml
 
-# ─── Setup (builds everything) ──────────────────────────
+# ─── Production ──────────────────────────────────────────
 
-setup: ## Build Docker images, start DB, run migrations & seed
-	$(DC) build app tools
-	$(DC) up db -d
-	@echo "Waiting for PostgreSQL to be ready..."
-	@until $(DC) exec -T db pg_isready -U s3admin -d s3_admin -q 2>/dev/null; do sleep 1; done
-	$(DC) run --rm -T tools npx --no-install prisma migrate deploy
-	$(DC) run --rm -T tools npx --no-install prisma db seed
-	@echo "\n✓ Setup complete."
-
-# ─── Run ─────────────────────────────────────────────────
-
-prod-run: ## Start production stack (app + db + proxy)
-	@. ./.env 2>/dev/null; \
-	if [ "$$ENVIRONMENT" = "PROD" ] && [ "$$POSTGRES_PASSWORD" = "password" ]; then \
-		echo "ERROR: Cannot start PROD with default POSTGRES_PASSWORD."; exit 1; \
+prod-setup: ## Build images, start DB, run migrations & seed
+	@. ./.env.prod 2>/dev/null; \
+	if [ "$$POSTGRES_PASSWORD" = "password" ] || [ -z "$$POSTGRES_PASSWORD" ]; then \
+		echo "ERROR: Set a strong POSTGRES_PASSWORD in .env.prod"; exit 1; \
 	fi
-	$(DC) up -d app db proxy
+	$(DC_PROD) build app tools
+	$(DC_PROD) up db -d
+	@echo "Waiting for PostgreSQL to be ready..."
+	@until $(DC_PROD) exec -T db pg_isready -U s3admin -d s3_admin -q 2>/dev/null; do sleep 1; done
+	$(DC_PROD) run --rm -T tools npx --no-install prisma migrate deploy
+	$(DC_PROD) run --rm -T tools npx --no-install prisma db seed
+	@echo "\n✓ Production setup complete."
+
+prod-start: ## Start production stack (app + db + proxy)
+	@. ./.env.prod 2>/dev/null; \
+	if [ "$$POSTGRES_PASSWORD" = "password" ] || [ -z "$$POSTGRES_PASSWORD" ]; then \
+		echo "ERROR: Set a strong POSTGRES_PASSWORD in .env.prod"; exit 1; \
+	fi
+	$(DC_PROD) up -d app db proxy
 	@echo "✓ Production is running."
 
-dev-run: ## Start DB + local dev server
-	$(DC) up db -d
-	@until $(DC) exec -T db pg_isready -U s3admin -d s3_admin -q 2>/dev/null; do sleep 1; done
+prod-stop: ## Stop production containers
+	$(DC_PROD) down
+	@echo "✓ Production stopped."
+
+prod-restart: ## Rebuild app image and restart production
+	$(DC_PROD) build app
+	$(DC_PROD) up -d app
+	@echo "✓ Production app restarted."
+
+prod-migrate: ## Run migrations & seed on production DB
+	$(DC_PROD) up db -d
+	@until $(DC_PROD) exec -T db pg_isready -U s3admin -d s3_admin -q 2>/dev/null; do sleep 1; done
+	$(DC_PROD) run --rm -T tools npx --no-install prisma migrate deploy
+	$(DC_PROD) run --rm -T tools npx --no-install prisma db seed
+	@echo "✓ Production migrations applied & seeded."
+
+# ─── Development ─────────────────────────────────────────
+
+dev-start: ## Start DB + local dev server
+	$(DC_DEV) up db -d
+	@until $(DC_DEV) exec -T db pg_isready -U s3admin -d s3_admin -q 2>/dev/null; do sleep 1; done
 	npm run dev
 
-# ─── Database ────────────────────────────────────────────
+dev-stop: ## Stop dev containers
+	$(DC_DEV) down
+	@echo "✓ Dev stopped."
 
-migrate: ## Run migrations & seed via tools container
-	$(DC) up db -d
-	@until $(DC) exec -T db pg_isready -U s3admin -d s3_admin -q 2>/dev/null; do sleep 1; done
-	$(DC) run --rm -T tools npx --no-install prisma migrate deploy
-	$(DC) run --rm -T tools npx --no-install prisma db seed
-	@echo "✓ Migrations applied & seeded."
-
-restart: ## Rebuild app image and restart
-	$(DC) build app
-	$(DC) up -d app
-	@echo "✓ App restarted."
-
-# ─── Stop & Reset ────────────────────────────────────────
-
-stop: ## Stop all containers
-	$(DC) down
-	@echo "✓ Stopped."
-
-reset-dev: ## Reset dev: stop containers, destroy DB volume, rebuild
-	$(DC) down -v
-	$(MAKE) setup
+dev-reset: ## Reset dev: destroy DB volume and restart
+	$(DC_DEV) down -v
+	$(DC_DEV) up db -d
+	@echo "Waiting for PostgreSQL to be ready..."
+	@until $(DC_DEV) exec -T db pg_isready -U s3admin -d s3_admin -q 2>/dev/null; do sleep 1; done
+	npx prisma migrate dev
+	npx prisma db seed
 	@echo "✓ Dev environment reset."

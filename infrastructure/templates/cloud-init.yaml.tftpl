@@ -58,12 +58,12 @@ write_files:
         git reset --hard "origin/${app_branch}"
       fi
 
-      cat > "${app_directory}/.env" <<'ENVEOF'
+      cat > "${app_directory}/.env.prod" <<'ENVEOF'
       ${indent(6, app_env_content)}
       ENVEOF
 
       cd "${app_directory}"
-      make prod
+      make prod-setup && make prod-start
 
       cat > /etc/systemd/system/s3administrator.service <<'SERVICEEOF'
       [Unit]
@@ -76,8 +76,8 @@ write_files:
       Type=oneshot
       RemainAfterExit=yes
       WorkingDirectory=${app_directory}
-      ExecStart=/usr/bin/docker compose -f docker/docker-compose.yml up -d --build app db proxy
-      ExecStop=/usr/bin/docker compose -f docker/docker-compose.yml down
+      ExecStart=/usr/bin/docker compose --env-file .env.prod -f docker/docker-compose.yml up -d app db proxy
+      ExecStop=/usr/bin/docker compose --env-file .env.prod -f docker/docker-compose.yml down
       TimeoutStartSec=0
 
       [Install]
