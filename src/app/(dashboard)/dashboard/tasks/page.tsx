@@ -192,6 +192,11 @@ export default function TasksPage() {
 
       const data = await res.json()
       if (!res.ok) {
+        if (res.status === 403 && data?.details?.plan) {
+          throw new Error(
+            `${data.error} (resolved plan: ${data.details.plan}, source: ${data.details.planSource})`
+          )
+        }
         throw new Error(data?.error ?? "Failed to start task")
       }
 

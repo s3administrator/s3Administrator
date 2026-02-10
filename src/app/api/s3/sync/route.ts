@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth"
 import { getS3Client } from "@/lib/s3"
 import { prisma } from "@/lib/db"
 import { getObjectExtension, rebuildUserExtensionStats } from "@/lib/file-stats"
-import { getTierLimits } from "@/lib/tiers"
+import { getUserPlanEntitlements } from "@/lib/plan-entitlements"
 import { getRequestContext, logUserAuditAction } from "@/lib/audit-logger"
 import { ListObjectsV2Command } from "@aws-sdk/client-s3"
 
@@ -30,13 +30,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get user's tier and limits
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { tier: true },
-    })
-
-    const tierLimits = getTierLimits(user?.tier ?? "free")
+    const entitlements = await getUserPlanEntitlements(session.user.id)
+    const fileLimit = entitlements?.fileLimit ?? Number.POSITIVE_INFINITY
 
     const { client, credential } = await getS3Client(session.user.id, credentialId)
 
@@ -49,7 +44,9 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    const availableSlots = Math.max(0, tierLimits.files - otherBucketCount)
+    const availableSlots = Number.isFinite(fileLimit)
+      ? Math.max(0, fileLimit - otherBucketCount)
+      : Number.POSITIVE_INFINITY
 
     // Paginate through all objects in the bucket
     const s3Objects: {
@@ -92,7 +89,9 @@ export async function POST(request: NextRequest) {
     const totalInS3 = s3Objects.length
 
     // Limit entries to tier allowance
-    const objectsToSync = s3Objects.slice(0, availableSlots)
+    const objectsToSync = Number.isFinite(availableSlots)
+      ? s3Objects.slice(0, availableSlots)
+      : s3Objects
 
     // Upsert entries into FileMetadata
     let synced = 0

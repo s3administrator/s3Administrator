@@ -14,7 +14,7 @@ import { getS3Client } from "@/lib/s3"
 import { rebuildUserExtensionStats } from "@/lib/file-stats"
 import { buildFileSearchWhereClause, parseScopes } from "@/lib/file-search"
 import { getMediaTypeFromExtension } from "@/lib/media"
-import { getTierLimits } from "@/lib/tiers"
+import { getUserPlanEntitlements } from "@/lib/plan-entitlements"
 import { generateVideoThumbnail } from "@/lib/thumbnail-worker"
 import {
   buildThumbnailObjectKey,
@@ -26,7 +26,6 @@ import { deleteMediaThumbnailsForKeys } from "@/lib/media-thumbnails"
 import { isThumbnailCacheEnabledForUser } from "@/lib/thumbnail-cache-policy"
 import {
   getObjectTransferDisabledMessage,
-  isObjectTransferEnabledForUser,
 } from "@/lib/transfer-task-policy"
 import { logUserAuditAction } from "@/lib/audit-logger"
 
@@ -769,8 +768,8 @@ export async function POST() {
         return NextResponse.json({ processed: false, message: "Invalid object transfer payload" })
       }
 
-      const transferEnabled = await isObjectTransferEnabledForUser(session.user.id)
-      if (!transferEnabled) {
+      const entitlements = await getUserPlanEntitlements(session.user.id)
+      if (!entitlements?.transferTasks) {
         await prisma.backgroundTask.update({
           where: { id: candidate.id },
           data: {
@@ -908,19 +907,14 @@ export async function POST() {
         transferPayload.operation === "copy" ||
         transferPayload.operation === "sync"
       ) {
-        const user = await prisma.user.findUnique({
-          where: { id: session.user.id },
-          select: { tier: true },
-        })
-        const limits = getTierLimits(user?.tier ?? "free")
-        if (Number.isFinite(limits.files)) {
+        if (Number.isFinite(entitlements.fileLimit)) {
           const currentCachedFileCount = await prisma.fileMetadata.count({
             where: {
               userId: session.user.id,
               isFolder: false,
             },
           })
-          remainingCacheSlots = Math.max(0, limits.files - currentCachedFileCount)
+          remainingCacheSlots = Math.max(0, entitlements.fileLimit - currentCachedFileCount)
         }
       }
 

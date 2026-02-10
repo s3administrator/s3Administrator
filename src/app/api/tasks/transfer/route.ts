@@ -2,10 +2,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/db"
 import { getS3Client } from "@/lib/s3"
-import { getTierLimits } from "@/lib/tiers"
+import { getUserPlanEntitlements } from "@/lib/plan-entitlements"
 import {
   getObjectTransferDisabledMessage,
-  isObjectTransferEnabledForUser,
 } from "@/lib/transfer-task-policy"
 import { transferTaskSchema } from "@/lib/validations"
 import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
@@ -38,10 +37,16 @@ export async function POST(request: NextRequest) {
       return rateLimitResponse(limitResult.retryAfterSeconds)
     }
 
-    const transferEnabled = await isObjectTransferEnabledForUser(session.user.id)
-    if (!transferEnabled) {
+    const entitlements = await getUserPlanEntitlements(session.user.id)
+    if (!entitlements?.transferTasks) {
       return NextResponse.json(
-        { error: getObjectTransferDisabledMessage() },
+        {
+          error: getObjectTransferDisabledMessage(),
+          details: {
+            plan: entitlements?.slug ?? "free",
+            planSource: entitlements?.source ?? "default",
+          },
+        },
         { status: 403 }
       )
     }
@@ -123,14 +128,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (operation === "copy" || operation === "sync") {
-      const user = await prisma.user.findUnique({
-        where: { id: session.user.id },
-        select: { tier: true },
-      })
-
-      const limits = getTierLimits(user?.tier ?? "free")
-
-      if (Number.isFinite(limits.files)) {
+      if (Number.isFinite(entitlements.fileLimit)) {
         const currentCachedFiles = await prisma.fileMetadata.count({
           where: {
             userId: session.user.id,
@@ -139,7 +137,7 @@ export async function POST(request: NextRequest) {
         })
 
         const projectedUpperBound = currentCachedFiles + sourceCachedFileCount
-        if (projectedUpperBound > limits.files) {
+        if (projectedUpperBound > entitlements.fileLimit) {
           return NextResponse.json(
             {
               error:
@@ -147,7 +145,7 @@ export async function POST(request: NextRequest) {
               details: {
                 currentCachedFiles,
                 sourceCachedFileCount,
-                fileLimit: limits.files,
+                fileLimit: entitlements.fileLimit,
                 projectedUpperBound,
               },
             },
