@@ -6,7 +6,6 @@ import { toast } from "sonner"
 import { ListTodo, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
   Select,
@@ -15,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { FolderPickerDialog } from "@/components/dashboard/folder-picker-dialog"
 
 type TaskScope = "folder" | "bucket"
 type TaskOperation = "sync" | "copy" | "move" | "migrate"
@@ -134,6 +134,14 @@ export default function TasksPage() {
       setDestinationBucket(destinationBuckets[0]?.name ?? "")
     }
   }, [destinationBuckets, destinationCredentialId, destinationBucket])
+
+  useEffect(() => {
+    setSourcePrefix("")
+  }, [sourceCredentialId, sourceBucket])
+
+  useEffect(() => {
+    setDestinationPrefix("")
+  }, [destinationCredentialId, destinationBucket])
 
   async function handleStartTask() {
     if (!sourceCredentialId || !destinationCredentialId) {
@@ -353,18 +361,26 @@ export default function TasksPage() {
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label>Source folder prefix</Label>
-                <Input
+                <FolderPickerDialog
+                  title="Pick Source Folder"
+                  description="Select the source folder from cached paths."
+                  credentialId={sourceCredentialId}
+                  bucket={sourceBucket}
                   value={sourcePrefix}
-                  onChange={(event) => setSourcePrefix(event.target.value)}
-                  placeholder="photos/2026/"
+                  onChange={setSourcePrefix}
+                  disabled={!sourceCredentialId || !sourceBucket}
                 />
               </div>
               <div className="space-y-2">
                 <Label>Destination folder prefix</Label>
-                <Input
+                <FolderPickerDialog
+                  title="Pick Destination Folder"
+                  description="Select the destination folder from cached paths."
+                  credentialId={destinationCredentialId}
+                  bucket={destinationBucket}
                   value={destinationPrefix}
-                  onChange={(event) => setDestinationPrefix(event.target.value)}
-                  placeholder="archive/2026/"
+                  onChange={setDestinationPrefix}
+                  disabled={!destinationCredentialId || !destinationBucket}
                 />
               </div>
             </div>
