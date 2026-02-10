@@ -128,8 +128,8 @@ export function GalleryBrowser({
                   className="block h-40 w-full overflow-hidden rounded-t-lg bg-muted"
                 >
                   {item.isFolder ? (
-                    <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
-                      <FolderOpen className="h-10 w-10" />
+                    <div className="flex h-full flex-col items-center justify-center gap-2 bg-amber-50/70 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
+                      <FolderOpen className="h-10 w-10 fill-current/20" />
                       <span className="text-xs">
                         {typeof item.fileCount === "number"
                           ? `${item.fileCount} ${item.fileCount === 1 ? "file" : "files"}`

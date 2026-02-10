@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { signOut, useSession } from "next-auth/react"
 import { toast } from "sonner"
@@ -76,6 +76,16 @@ interface BackgroundTask {
   updatedAt: string
 }
 
+interface TaskSummary {
+  cachedFiles: number
+  thumbnails: {
+    ready: number
+    total: number
+    pending: number
+    failed: number
+  }
+}
+
 function formatSize(bytes: number): string {
   if (bytes === 0) return "0 B"
   const units = ["B", "KB", "MB", "GB", "TB"]
@@ -128,16 +138,16 @@ export function Sidebar() {
     },
   })
 
-  const { data: tasks = [] } = useQuery<BackgroundTask[]>({
+  const { data: tasksData } = useQuery<{ tasks: BackgroundTask[]; summary: TaskSummary }>({
     queryKey: ["background-tasks"],
     queryFn: async () => {
       const res = await fetch("/api/tasks?scope=ongoing&limit=5")
-      if (!res.ok) return []
-      const data = await res.json()
-      return (data.tasks ?? []) as BackgroundTask[]
+      if (!res.ok) return { tasks: [], summary: { cachedFiles: 0, thumbnails: { ready: 0, total: 0, pending: 0, failed: 0 } } }
+      return (await res.json()) as { tasks: BackgroundTask[]; summary: TaskSummary }
     },
-    refetchInterval: 4000,
   })
+  const tasks = tasksData?.tasks ?? []
+  const taskSummary = tasksData?.summary
 
   const statsByBucket = useMemo(
     () =>
@@ -238,21 +248,6 @@ export function Sidebar() {
       // Background processing can fail temporarily; it will retry on next poll.
     }
   }, [queryClient])
-
-  useEffect(() => {
-    const hasRunnableTask = tasks.some(
-      (task) => task.status === "pending" || task.status === "in_progress"
-    )
-    if (!hasRunnableTask) return
-
-    const timer = setInterval(() => {
-      void processTaskQueue()
-    }, 4000)
-
-    void processTaskQueue()
-
-    return () => clearInterval(timer)
-  }, [tasks, processTaskQueue])
 
   return (
     <TooltipProvider>
@@ -465,11 +460,61 @@ export function Sidebar() {
                 variant="ghost"
                 size="sm"
                 className="h-6 px-2 text-xs"
-                onClick={processTaskQueue}
+                onClick={() => {
+                  void processTaskQueue()
+                  queryClient.invalidateQueries({ queryKey: ["background-tasks"] })
+                }}
               >
-                Run
+                Poll
               </Button>
             </div>
+            {taskSummary ? (
+              <div className="mb-2 space-y-1 rounded-sm bg-muted/30 px-2 py-1.5">
+                <p className="text-[11px] text-muted-foreground">
+                  Cached files:{" "}
+                  <span className="font-medium text-foreground">
+                    {taskSummary.cachedFiles.toLocaleString()}
+                  </span>
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  Thumbnails:{" "}
+                  <span className="font-medium text-foreground">
+                    {taskSummary.thumbnails.ready.toLocaleString()}/{taskSummary.thumbnails.total.toLocaleString()}
+                  </span>
+                  {taskSummary.thumbnails.total > 0 ? (
+                    <>
+                      {" "}
+                      (
+                      {Math.round(
+                        (taskSummary.thumbnails.ready / taskSummary.thumbnails.total) * 100
+                      )}
+                      %)
+                    </>
+                  ) : null}
+                </p>
+                {taskSummary.thumbnails.total > 0 ? (
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full bg-primary transition-all"
+                      style={{
+                        width: `${Math.min(
+                          100,
+                          Math.round(
+                            (taskSummary.thumbnails.ready / taskSummary.thumbnails.total) * 100
+                          )
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                ) : null}
+                {(taskSummary.thumbnails.pending > 0 || taskSummary.thumbnails.failed > 0) ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    Pending: {taskSummary.thumbnails.pending.toLocaleString()} · Failed:{" "}
+                    {taskSummary.thumbnails.failed.toLocaleString()}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             {tasks.length === 0 ? (
               <p className="text-xs text-muted-foreground">No ongoing tasks</p>
             ) : (
