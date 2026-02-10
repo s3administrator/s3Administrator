@@ -1,11 +1,20 @@
 import { NextResponse } from "next/server"
-import { DeleteObjectsCommand } from "@aws-sdk/client-s3"
+import {
+  CopyObjectCommand,
+  DeleteObjectCommand,
+  DeleteObjectsCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+  type S3Client,
+} from "@aws-sdk/client-s3"
+import type { Prisma } from "@prisma/client"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/db"
 import { getS3Client } from "@/lib/s3"
 import { rebuildUserExtensionStats } from "@/lib/file-stats"
 import { buildFileSearchWhereClause, parseScopes } from "@/lib/file-search"
 import { getMediaTypeFromExtension } from "@/lib/media"
+import { getTierLimits } from "@/lib/tiers"
 import { generateVideoThumbnail } from "@/lib/thumbnail-worker"
 import {
   buildThumbnailObjectKey,
@@ -18,6 +27,7 @@ import { isThumbnailCacheEnabledForUser } from "@/lib/thumbnail-cache-policy"
 import { logUserAuditAction } from "@/lib/audit-logger"
 
 const CHUNK_SIZE = 500
+const TRANSFER_CHUNK_SIZE = 100
 const LOCK_SECONDS = 20
 const THUMBNAIL_TIMEOUT_MS = 5_000
 
@@ -38,6 +48,33 @@ interface BulkDeleteTaskProgress {
   total: number
   deleted: number
   remaining: number
+}
+
+type TransferScope = "folder" | "bucket"
+type TransferOperation = "sync" | "copy" | "move" | "migrate"
+
+interface ObjectTransferTaskPayload {
+  scope: TransferScope
+  operation: TransferOperation
+  sourceCredentialId: string
+  sourceBucket: string
+  sourcePrefix: string | null
+  destinationCredentialId: string
+  destinationBucket: string
+  destinationPrefix: string | null
+}
+
+interface ObjectTransferTaskProgress {
+  phase: "transfer"
+  total: number
+  processed: number
+  copied: number
+  moved: number
+  deleted: number
+  skipped: number
+  failed: number
+  remaining: number
+  cursorKey: string | null
 }
 
 function parsePayload(raw: unknown): BulkDeleteTaskPayload | null {
@@ -114,6 +151,189 @@ function parseProgress(raw: unknown, totalFallback = 0): BulkDeleteTaskProgress 
   }
 }
 
+function parseObjectTransferPayload(raw: unknown): ObjectTransferTaskPayload | null {
+  if (!raw || typeof raw !== "object") return null
+
+  const payload = raw as {
+    scope?: unknown
+    operation?: unknown
+    sourceCredentialId?: unknown
+    sourceBucket?: unknown
+    sourcePrefix?: unknown
+    destinationCredentialId?: unknown
+    destinationBucket?: unknown
+    destinationPrefix?: unknown
+  }
+
+  const scope = payload.scope
+  const operation = payload.operation
+  if (scope !== "folder" && scope !== "bucket") return null
+  if (
+    operation !== "sync" &&
+    operation !== "copy" &&
+    operation !== "move" &&
+    operation !== "migrate"
+  ) {
+    return null
+  }
+
+  if (typeof payload.sourceCredentialId !== "string" || !payload.sourceCredentialId.trim()) return null
+  if (typeof payload.sourceBucket !== "string" || !payload.sourceBucket.trim()) return null
+  if (typeof payload.destinationCredentialId !== "string" || !payload.destinationCredentialId.trim()) return null
+  if (typeof payload.destinationBucket !== "string" || !payload.destinationBucket.trim()) return null
+
+  const sourcePrefix =
+    payload.sourcePrefix === null
+      ? null
+      : typeof payload.sourcePrefix === "string"
+        ? payload.sourcePrefix
+        : null
+  const destinationPrefix =
+    payload.destinationPrefix === null
+      ? null
+      : typeof payload.destinationPrefix === "string"
+        ? payload.destinationPrefix
+        : null
+
+  if (scope === "folder") {
+    if (!sourcePrefix || !destinationPrefix) {
+      return null
+    }
+  }
+
+  return {
+    scope,
+    operation,
+    sourceCredentialId: payload.sourceCredentialId.trim(),
+    sourceBucket: payload.sourceBucket.trim(),
+    sourcePrefix,
+    destinationCredentialId: payload.destinationCredentialId.trim(),
+    destinationBucket: payload.destinationBucket.trim(),
+    destinationPrefix,
+  }
+}
+
+function parseObjectTransferProgress(
+  raw: unknown,
+  totalFallback = 0
+): ObjectTransferTaskProgress {
+  if (!raw || typeof raw !== "object") {
+    return {
+      phase: "transfer",
+      total: totalFallback,
+      processed: 0,
+      copied: 0,
+      moved: 0,
+      deleted: 0,
+      skipped: 0,
+      failed: 0,
+      remaining: totalFallback,
+      cursorKey: null,
+    }
+  }
+
+  const progress = raw as {
+    phase?: unknown
+    total?: unknown
+    processed?: unknown
+    copied?: unknown
+    moved?: unknown
+    deleted?: unknown
+    skipped?: unknown
+    failed?: unknown
+    remaining?: unknown
+    cursorKey?: unknown
+  }
+
+  const total =
+    typeof progress.total === "number" ? Math.max(0, Math.floor(progress.total)) : totalFallback
+  const processed =
+    typeof progress.processed === "number" ? Math.max(0, Math.floor(progress.processed)) : 0
+  const copied = typeof progress.copied === "number" ? Math.max(0, Math.floor(progress.copied)) : 0
+  const moved = typeof progress.moved === "number" ? Math.max(0, Math.floor(progress.moved)) : 0
+  const deleted = typeof progress.deleted === "number" ? Math.max(0, Math.floor(progress.deleted)) : 0
+  const skipped = typeof progress.skipped === "number" ? Math.max(0, Math.floor(progress.skipped)) : 0
+  const failed = typeof progress.failed === "number" ? Math.max(0, Math.floor(progress.failed)) : 0
+
+  const remaining =
+    typeof progress.remaining === "number"
+      ? Math.max(0, Math.floor(progress.remaining))
+      : Math.max(0, total - processed)
+
+  return {
+    phase: progress.phase === "transfer" ? "transfer" : "transfer",
+    total,
+    processed,
+    copied,
+    moved,
+    deleted,
+    skipped,
+    failed,
+    remaining,
+    cursorKey: typeof progress.cursorKey === "string" && progress.cursorKey.length > 0
+      ? progress.cursorKey
+      : null,
+  }
+}
+
+function mapTransferDestinationKey(
+  payload: ObjectTransferTaskPayload,
+  sourceKey: string
+): string {
+  if (payload.scope === "bucket") {
+    return sourceKey
+  }
+
+  const sourcePrefix = payload.sourcePrefix ?? ""
+  const destinationPrefix = payload.destinationPrefix ?? ""
+  if (!sourcePrefix || !sourceKey.startsWith(sourcePrefix)) {
+    return `${destinationPrefix}${sourceKey}`
+  }
+  return `${destinationPrefix}${sourceKey.slice(sourcePrefix.length)}`
+}
+
+async function copyObjectAcrossLocations(params: {
+  sourceClient: S3Client
+  destinationClient: S3Client
+  sameCredential: boolean
+  sourceBucket: string
+  sourceKey: string
+  destinationBucket: string
+  destinationKey: string
+}) {
+  if (params.sameCredential) {
+    await params.destinationClient.send(
+      new CopyObjectCommand({
+        Bucket: params.destinationBucket,
+        CopySource: encodeURIComponent(`${params.sourceBucket}/${params.sourceKey}`),
+        Key: params.destinationKey,
+      })
+    )
+    return
+  }
+
+  const sourceObject = await params.sourceClient.send(
+    new GetObjectCommand({
+      Bucket: params.sourceBucket,
+      Key: params.sourceKey,
+    })
+  )
+
+  if (!sourceObject.Body) {
+    throw new Error(`Missing source object body for key '${params.sourceKey}'`)
+  }
+
+  await params.destinationClient.send(
+    new PutObjectCommand({
+      Bucket: params.destinationBucket,
+      Key: params.destinationKey,
+      Body: sourceObject.Body,
+      ContentType: sourceObject.ContentType,
+      CacheControl: sourceObject.CacheControl,
+    })
+  )
+}
+
 async function deleteKeysFromBucket(
   client: InstanceType<typeof import("@aws-sdk/client-s3").S3Client>,
   bucket: string,
@@ -172,6 +392,7 @@ export async function POST() {
     | null = null
   let userId: string | null = null
   let thumbnailPayload: ThumbnailTaskPayload | null = null
+  let transferPayload: ObjectTransferTaskPayload | null = null
 
   try {
     const session = await auth()
@@ -181,12 +402,29 @@ export async function POST() {
     userId = session.user.id
 
     const now = new Date()
+    const lockedTask = await prisma.backgroundTask.findFirst({
+      where: {
+        userId: session.user.id,
+        status: "in_progress",
+        nextRunAt: {
+          gt: now,
+        },
+      },
+      select: { id: true },
+    })
+
+    if (lockedTask) {
+      return NextResponse.json({
+        processed: false,
+        message: "Another task is currently locked for processing",
+      })
+    }
 
     const candidate = await prisma.backgroundTask.findFirst({
       where: {
         userId: session.user.id,
         type: {
-          in: ["bulk_delete", "thumbnail_generate"],
+          in: ["bulk_delete", "thumbnail_generate", "object_transfer"],
         },
         status: {
           in: ["pending", "in_progress"],
@@ -511,6 +749,319 @@ export async function POST() {
       })
     }
 
+    if (candidate.type === "object_transfer") {
+      transferPayload = parseObjectTransferPayload(candidate.payload)
+      if (!transferPayload) {
+        await prisma.backgroundTask.update({
+          where: { id: candidate.id },
+          data: {
+            status: "failed",
+            attempts: candidate.attempts + 1,
+            lastError: "Invalid object transfer payload",
+            completedAt: new Date(),
+            nextRunAt: new Date(),
+          },
+        })
+        return NextResponse.json({ processed: false, message: "Invalid object transfer payload" })
+      }
+
+      const progress = parseObjectTransferProgress(candidate.progress)
+      const sourceKeyFilter: { startsWith?: string; gt?: string } = {}
+      if (transferPayload.scope === "folder" && transferPayload.sourcePrefix) {
+        sourceKeyFilter.startsWith = transferPayload.sourcePrefix
+      }
+      if (progress.cursorKey) {
+        sourceKeyFilter.gt = progress.cursorKey
+      }
+
+      const sourceBatch = await prisma.fileMetadata.findMany({
+        where: {
+          userId: session.user.id,
+          credentialId: transferPayload.sourceCredentialId,
+          bucket: transferPayload.sourceBucket,
+          isFolder: false,
+          ...(Object.keys(sourceKeyFilter).length > 0 ? { key: sourceKeyFilter } : {}),
+        },
+        orderBy: { key: "asc" },
+        take: TRANSFER_CHUNK_SIZE,
+        select: {
+          id: true,
+          key: true,
+          extension: true,
+          size: true,
+          lastModified: true,
+        },
+      })
+
+      if (sourceBatch.length === 0) {
+        const total = progress.total > 0 ? progress.total : progress.processed
+        await rebuildUserExtensionStats(session.user.id)
+
+        await prisma.backgroundTask.update({
+          where: { id: candidate.id },
+          data: {
+            status: "completed",
+            attempts: 0,
+            completedAt: new Date(),
+            nextRunAt: new Date(),
+            progress: {
+              ...progress,
+              total,
+              remaining: 0,
+            } as Prisma.InputJsonObject,
+            lastError: null,
+          },
+        })
+
+        await logUserAuditAction({
+          userId: session.user.id,
+          eventType: "s3_action",
+          eventName: "object_transfer_completed",
+          path: "/api/tasks/process",
+          method: "POST",
+          target: `${transferPayload.sourceBucket} -> ${transferPayload.destinationBucket}`,
+          metadata: {
+            scope: transferPayload.scope,
+            operation: transferPayload.operation,
+            sourceCredentialId: transferPayload.sourceCredentialId,
+            sourceBucket: transferPayload.sourceBucket,
+            sourcePrefix: transferPayload.sourcePrefix,
+            destinationCredentialId: transferPayload.destinationCredentialId,
+            destinationBucket: transferPayload.destinationBucket,
+            destinationPrefix: transferPayload.destinationPrefix,
+            progress: {
+              total,
+              processed: progress.processed,
+              copied: progress.copied,
+              moved: progress.moved,
+              deleted: progress.deleted,
+              skipped: progress.skipped,
+              failed: progress.failed,
+            },
+          },
+        })
+
+        return NextResponse.json({
+          processed: true,
+          taskId: candidate.id,
+          done: true,
+          type: "object_transfer",
+        })
+      }
+
+      const [{ client: sourceClient }, { client: destinationClient }] = await Promise.all([
+        getS3Client(session.user.id, transferPayload.sourceCredentialId),
+        getS3Client(session.user.id, transferPayload.destinationCredentialId),
+      ])
+
+      const sameCredential =
+        transferPayload.sourceCredentialId === transferPayload.destinationCredentialId
+      const destinationKeys = sourceBatch.map((file) =>
+        mapTransferDestinationKey(transferPayload as ObjectTransferTaskPayload, file.key)
+      )
+
+      const destinationRows = await prisma.fileMetadata.findMany({
+        where: {
+          userId: session.user.id,
+          credentialId: transferPayload.destinationCredentialId,
+          bucket: transferPayload.destinationBucket,
+          isFolder: false,
+          key: { in: destinationKeys },
+        },
+        select: {
+          key: true,
+          size: true,
+          lastModified: true,
+        },
+      })
+
+      const destinationByKey = new Map(destinationRows.map((row) => [row.key, row]))
+
+      let remainingCacheSlots: number | null = null
+      if (
+        transferPayload.operation === "copy" ||
+        transferPayload.operation === "sync"
+      ) {
+        const user = await prisma.user.findUnique({
+          where: { id: session.user.id },
+          select: { tier: true },
+        })
+        const limits = getTierLimits(user?.tier ?? "free")
+        if (Number.isFinite(limits.files)) {
+          const currentCachedFileCount = await prisma.fileMetadata.count({
+            where: {
+              userId: session.user.id,
+              isFolder: false,
+            },
+          })
+          remainingCacheSlots = Math.max(0, limits.files - currentCachedFileCount)
+        }
+      }
+
+      let copiedInBatch = 0
+      let movedInBatch = 0
+      let deletedInBatch = 0
+      let skippedInBatch = 0
+      let processedInBatch = 0
+      const movedSourceKeys: string[] = []
+
+      for (const sourceFile of sourceBatch) {
+        const destinationKey = mapTransferDestinationKey(
+          transferPayload as ObjectTransferTaskPayload,
+          sourceFile.key
+        )
+
+        if (
+          sameCredential &&
+          transferPayload.sourceBucket === transferPayload.destinationBucket &&
+          sourceFile.key === destinationKey
+        ) {
+          skippedInBatch++
+          processedInBatch++
+          continue
+        }
+
+        const destinationExisting = destinationByKey.get(destinationKey)
+        const createsNewDestination = !destinationExisting
+
+        if (createsNewDestination && remainingCacheSlots !== null && remainingCacheSlots <= 0) {
+          skippedInBatch++
+          processedInBatch++
+          continue
+        }
+
+        if (transferPayload.operation === "copy" && destinationExisting) {
+          skippedInBatch++
+          processedInBatch++
+          continue
+        }
+
+        if (
+          transferPayload.operation === "sync" &&
+          destinationExisting &&
+          destinationExisting.size.toString() === sourceFile.size.toString() &&
+          destinationExisting.lastModified.getTime() === sourceFile.lastModified.getTime()
+        ) {
+          skippedInBatch++
+          processedInBatch++
+          continue
+        }
+
+        await copyObjectAcrossLocations({
+          sourceClient,
+          destinationClient,
+          sameCredential,
+          sourceBucket: transferPayload.sourceBucket,
+          sourceKey: sourceFile.key,
+          destinationBucket: transferPayload.destinationBucket,
+          destinationKey,
+        })
+
+        await prisma.fileMetadata.upsert({
+          where: {
+            credentialId_bucket_key: {
+              credentialId: transferPayload.destinationCredentialId,
+              bucket: transferPayload.destinationBucket,
+              key: destinationKey,
+            },
+          },
+          create: {
+            userId: session.user.id,
+            credentialId: transferPayload.destinationCredentialId,
+            bucket: transferPayload.destinationBucket,
+            key: destinationKey,
+            extension: sourceFile.extension,
+            size: sourceFile.size,
+            lastModified: sourceFile.lastModified,
+            isFolder: false,
+          },
+          update: {
+            extension: sourceFile.extension,
+            size: sourceFile.size,
+            lastModified: sourceFile.lastModified,
+            isFolder: false,
+          },
+        })
+        if (createsNewDestination && remainingCacheSlots !== null) {
+          remainingCacheSlots = Math.max(0, remainingCacheSlots - 1)
+        }
+
+        if (
+          transferPayload.operation === "move" ||
+          transferPayload.operation === "migrate"
+        ) {
+          await sourceClient.send(
+            new DeleteObjectCommand({
+              Bucket: transferPayload.sourceBucket,
+              Key: sourceFile.key,
+            })
+          )
+
+          await prisma.fileMetadata.deleteMany({
+            where: {
+              id: sourceFile.id,
+              userId: session.user.id,
+            },
+          })
+
+          movedSourceKeys.push(sourceFile.key)
+          movedInBatch++
+          deletedInBatch++
+        } else {
+          copiedInBatch++
+        }
+
+        processedInBatch++
+      }
+
+      if (movedSourceKeys.length > 0) {
+        await deleteMediaThumbnailsForKeys({
+          userId: session.user.id,
+          credentialId: transferPayload.sourceCredentialId,
+          bucket: transferPayload.sourceBucket,
+          keys: movedSourceKeys,
+        })
+      }
+
+      const total = progress.total > 0 ? progress.total : sourceBatch.length
+      const nextProcessed = progress.processed + processedInBatch
+      const nextProgress: ObjectTransferTaskProgress = {
+        phase: "transfer",
+        total,
+        processed: nextProcessed,
+        copied: progress.copied + copiedInBatch,
+        moved: progress.moved + movedInBatch,
+        deleted: progress.deleted + deletedInBatch,
+        skipped: progress.skipped + skippedInBatch,
+        failed: progress.failed,
+        remaining: Math.max(0, total - nextProcessed),
+        cursorKey: sourceBatch[sourceBatch.length - 1]?.key ?? progress.cursorKey,
+      }
+
+      await prisma.backgroundTask.update({
+        where: { id: candidate.id },
+        data: {
+          status: "in_progress",
+          attempts: 0,
+          nextRunAt: new Date(),
+          progress: nextProgress as unknown as Prisma.InputJsonObject,
+          lastError: null,
+          completedAt: null,
+        },
+      })
+
+      return NextResponse.json({
+        processed: true,
+        taskId: candidate.id,
+        done: false,
+        type: "object_transfer",
+        processedInBatch,
+        copiedInBatch,
+        movedInBatch,
+        skippedInBatch,
+      })
+    }
+
     const payload = parsePayload(candidate.payload)
     if (!payload) {
       const nextAttempts = candidate.attempts + 1
@@ -694,6 +1245,28 @@ export async function POST() {
             metadata: {
               bucket: thumbnailPayload.bucket,
               credentialId: thumbnailPayload.credentialId,
+              error: message,
+            },
+          })
+        }
+
+        if (claimedTask.type === "object_transfer" && transferPayload) {
+          await logUserAuditAction({
+            userId,
+            eventType: "s3_action",
+            eventName: "object_transfer_failed",
+            path: "/api/tasks/process",
+            method: "POST",
+            target: `${transferPayload.sourceBucket} -> ${transferPayload.destinationBucket}`,
+            metadata: {
+              scope: transferPayload.scope,
+              operation: transferPayload.operation,
+              sourceCredentialId: transferPayload.sourceCredentialId,
+              sourceBucket: transferPayload.sourceBucket,
+              sourcePrefix: transferPayload.sourcePrefix,
+              destinationCredentialId: transferPayload.destinationCredentialId,
+              destinationBucket: transferPayload.destinationBucket,
+              destinationPrefix: transferPayload.destinationPrefix,
               error: message,
             },
           })

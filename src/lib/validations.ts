@@ -90,3 +90,14 @@ export const previewSchema = z.object({
   credentialId: z.string().optional(),
   key: s3KeySchema,
 })
+
+export const transferTaskSchema = z.object({
+  scope: z.enum(["folder", "bucket"]),
+  operation: z.enum(["sync", "copy", "move", "migrate"]),
+  sourceBucket: s3BucketSchema,
+  sourceCredentialId: z.string().optional(),
+  sourcePrefix: z.string().max(1024).optional(),
+  destinationBucket: s3BucketSchema,
+  destinationCredentialId: z.string().optional(),
+  destinationPrefix: z.string().max(1024).optional(),
+})

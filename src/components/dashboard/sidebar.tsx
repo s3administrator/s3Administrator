@@ -69,7 +69,12 @@ interface BackgroundTask {
   status: "pending" | "in_progress" | "completed" | "failed"
   progress?: {
     total?: number
+    processed?: number
+    copied?: number
+    moved?: number
     deleted?: number
+    skipped?: number
+    failed?: number
     remaining?: number
   } | null
   lastError?: string | null
@@ -521,9 +526,16 @@ export function Sidebar() {
               <div className="space-y-1">
                 {tasks.map((task) => {
                   const total = Number(task.progress?.total ?? 0)
+                  const processed = Number(task.progress?.processed ?? 0)
                   const deleted = Number(task.progress?.deleted ?? 0)
+                  const copied = Number(task.progress?.copied ?? 0)
+                  const moved = Number(task.progress?.moved ?? 0)
+                  const skipped = Number(task.progress?.skipped ?? 0)
+                  const failed = Number(task.progress?.failed ?? 0)
+                  const completedUnits =
+                    task.type === "bulk_delete" ? deleted : (processed > 0 ? processed : deleted)
                   const pct =
-                    total > 0 ? Math.min(100, Math.round((deleted / total) * 100)) : 0
+                    total > 0 ? Math.min(100, Math.round((completedUnits / total) * 100)) : 0
                   const statusLabel =
                     task.status === "in_progress"
                       ? "In progress"
@@ -538,8 +550,32 @@ export function Sidebar() {
                       <p className="truncate text-xs font-medium">{task.title}</p>
                       <p className="text-[11px] text-muted-foreground">
                         {statusLabel}
-                        {total > 0 ? ` · ${deleted}/${total}` : ""}
+                        {total > 0 ? ` · ${completedUnits}/${total}` : ""}
                       </p>
+                      {task.type === "object_transfer" ? (
+                        <p className="text-[11px] text-muted-foreground">
+                          Copied: {copied} · Moved: {moved} · Skipped: {skipped}
+                          {failed > 0 ? ` · Failed: ${failed}` : ""}
+                        </p>
+                      ) : null}
+                      {task.type === "bulk_delete" && total > 0 ? (
+                        <p className="text-[11px] text-muted-foreground">
+                          Deleted: {deleted}/{total}
+                        </p>
+                      ) : null}
+                      {task.type === "thumbnail_generate" ? (
+                        <p className="text-[11px] text-muted-foreground">
+                          Thumbnail generation
+                        </p>
+                      ) : null}
+                      {task.type !== "object_transfer" &&
+                      task.type !== "bulk_delete" &&
+                      task.type !== "thumbnail_generate" &&
+                      total > 0 ? (
+                        <p className="text-[11px] text-muted-foreground">
+                          Processed: {completedUnits}/{total}
+                        </p>
+                      ) : null}
                       {total > 0 && task.status !== "failed" && (
                         <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
                           <div
