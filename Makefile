@@ -1,4 +1,6 @@
-.PHONY: help prod-setup prod-start prod-stop prod-restart prod-migrate dev-start dev-stop dev-reset
+.PHONY: help \
+	prod-setup prod-start prod-stop prod-restart prod-migrate \
+	dev-setup dev-start dev-stop dev-restart dev-migrate dev-local dev-reset
 
 DC_DEV  = docker compose --env-file .env.dev -f docker/docker-compose.yml
 DC_PROD = docker compose --env-file .env.prod -f docker/docker-compose.yml
@@ -55,10 +57,29 @@ prod-migrate: ## Run migrations & seed on production DB
 
 # ─── Development ─────────────────────────────────────────
 
-dev-start: ## Start DB + local dev server
+dev-setup: ## Build images, start DB, run migrations & seed for development
+	$(DC_DEV) build app tools
 	$(DC_DEV) up db -d
+	@echo "Waiting for PostgreSQL to be ready..."
 	@until $(DC_DEV) exec -T db pg_isready -U s3admin -d s3_admin -q 2>/dev/null; do sleep 1; done
-	npm run dev
+	$(DC_DEV) run --rm -T tools npx --no-install prisma migrate deploy
+	$(DC_DEV) run --rm -T tools npx --no-install prisma db seed
+	@echo "\n✓ Development setup complete."
+
+dev-start: ## Start development stack (app + db + proxy)
+	$(DC_DEV) up -d app db proxy
+	@echo "✓ Development stack is running."
+
+dev-restart: ## Rebuild app image and restart development app
+	$(DC_DEV) build app
+	$(DC_DEV) up -d app
+	@echo "✓ Development app restarted."
+
+dev-local: ## Start DB container and run local Next.js dev server using .env.dev
+	$(DC_DEV) up db -d
+	@echo "Waiting for PostgreSQL to be ready..."
+	@until $(DC_DEV) exec -T db pg_isready -U s3admin -d s3_admin -q 2>/dev/null; do sleep 1; done
+	@set -a; . ./.env.dev; set +a; npm run dev
 
 dev-stop: ## Stop dev containers
 	$(DC_DEV) down
@@ -72,3 +93,10 @@ dev-reset: ## Reset dev: destroy DB volume and restart
 	npx prisma migrate dev
 	npx prisma db seed
 	@echo "✓ Dev environment reset."
+
+dev-migrate: ## Run migrations & seed on development DB
+	$(DC_DEV) up db -d
+	@until $(DC_DEV) exec -T db pg_isready -U s3admin -d s3_admin -q 2>/dev/null; do sleep 1; done
+	$(DC_DEV) run --rm -T tools npx --no-install prisma migrate deploy
+	$(DC_DEV) run --rm -T tools npx --no-install prisma db seed
+	@echo "✓ Development migrations applied & seeded."

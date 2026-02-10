@@ -81,16 +81,6 @@ interface BackgroundTask {
   updatedAt: string
 }
 
-interface TaskSummary {
-  cachedFiles: number
-  thumbnails: {
-    ready: number
-    total: number
-    pending: number
-    failed: number
-  }
-}
-
 function formatSize(bytes: number): string {
   if (bytes === 0) return "0 B"
   const units = ["B", "KB", "MB", "GB", "TB"]
@@ -113,6 +103,7 @@ export function Sidebar() {
     pathname === "/dashboard" &&
     !searchParams.get("bucket") &&
     !searchParams.get("prefix")
+  const isTasksActive = pathname === "/dashboard/tasks"
 
   const { data: buckets = [], isLoading: bucketsLoading } = useQuery<Bucket[]>({
     queryKey: ["buckets"],
@@ -143,16 +134,15 @@ export function Sidebar() {
     },
   })
 
-  const { data: tasksData } = useQuery<{ tasks: BackgroundTask[]; summary: TaskSummary }>({
+  const { data: tasksData } = useQuery<{ tasks: BackgroundTask[] }>({
     queryKey: ["background-tasks"],
     queryFn: async () => {
       const res = await fetch("/api/tasks?scope=ongoing&limit=5")
-      if (!res.ok) return { tasks: [], summary: { cachedFiles: 0, thumbnails: { ready: 0, total: 0, pending: 0, failed: 0 } } }
-      return (await res.json()) as { tasks: BackgroundTask[]; summary: TaskSummary }
+      if (!res.ok) return { tasks: [] }
+      return (await res.json()) as { tasks: BackgroundTask[] }
     },
   })
   const tasks = tasksData?.tasks ?? []
-  const taskSummary = tasksData?.summary
 
   const statsByBucket = useMemo(
     () =>
@@ -454,6 +444,17 @@ export function Sidebar() {
             Audit Logs
           </Link>
 
+          <Link
+            href="/dashboard/tasks"
+            className={cn(
+              "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent",
+              isTasksActive && "bg-accent"
+            )}
+          >
+            <ListTodo className="h-4 w-4" />
+            Tasks
+          </Link>
+
           <div className="rounded-md border p-2">
             <div className="mb-1 flex items-center justify-between">
               <p className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
@@ -473,125 +474,19 @@ export function Sidebar() {
                 Poll
               </Button>
             </div>
-            {taskSummary ? (
-              <div className="mb-2 space-y-1 rounded-sm bg-muted/30 px-2 py-1.5">
-                <p className="text-[11px] text-muted-foreground">
-                  Cached files:{" "}
-                  <span className="font-medium text-foreground">
-                    {taskSummary.cachedFiles.toLocaleString()}
-                  </span>
-                </p>
-                <p className="text-[11px] text-muted-foreground">
-                  Thumbnails:{" "}
-                  <span className="font-medium text-foreground">
-                    {taskSummary.thumbnails.ready.toLocaleString()}/{taskSummary.thumbnails.total.toLocaleString()}
-                  </span>
-                  {taskSummary.thumbnails.total > 0 ? (
-                    <>
-                      {" "}
-                      (
-                      {Math.round(
-                        (taskSummary.thumbnails.ready / taskSummary.thumbnails.total) * 100
-                      )}
-                      %)
-                    </>
-                  ) : null}
-                </p>
-                {taskSummary.thumbnails.total > 0 ? (
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                    <div
-                      className="h-full rounded-full bg-primary transition-all"
-                      style={{
-                        width: `${Math.min(
-                          100,
-                          Math.round(
-                            (taskSummary.thumbnails.ready / taskSummary.thumbnails.total) * 100
-                          )
-                        )}%`,
-                      }}
-                    />
-                  </div>
-                ) : null}
-                {(taskSummary.thumbnails.pending > 0 || taskSummary.thumbnails.failed > 0) ? (
-                  <p className="text-[11px] text-muted-foreground">
-                    Pending: {taskSummary.thumbnails.pending.toLocaleString()} · Failed:{" "}
-                    {taskSummary.thumbnails.failed.toLocaleString()}
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
             {tasks.length === 0 ? (
               <p className="text-xs text-muted-foreground">No ongoing tasks</p>
             ) : (
               <div className="space-y-1">
-                {tasks.map((task) => {
-                  const total = Number(task.progress?.total ?? 0)
-                  const processed = Number(task.progress?.processed ?? 0)
-                  const deleted = Number(task.progress?.deleted ?? 0)
-                  const copied = Number(task.progress?.copied ?? 0)
-                  const moved = Number(task.progress?.moved ?? 0)
-                  const skipped = Number(task.progress?.skipped ?? 0)
-                  const failed = Number(task.progress?.failed ?? 0)
-                  const completedUnits =
-                    task.type === "bulk_delete" ? deleted : (processed > 0 ? processed : deleted)
-                  const pct =
-                    total > 0 ? Math.min(100, Math.round((completedUnits / total) * 100)) : 0
-                  const statusLabel =
-                    task.status === "in_progress"
-                      ? "In progress"
-                      : task.status === "pending"
-                        ? "Pending"
-                        : task.status === "failed"
-                          ? "Failed"
-                          : "Completed"
-
-                  return (
-                    <div key={task.id} className="rounded-sm bg-muted/40 px-2 py-1.5">
-                      <p className="truncate text-xs font-medium">{task.title}</p>
-                      <p className="text-[11px] text-muted-foreground">
-                        {statusLabel}
-                        {total > 0 ? ` · ${completedUnits}/${total}` : ""}
-                      </p>
-                      {task.type === "object_transfer" ? (
-                        <p className="text-[11px] text-muted-foreground">
-                          Copied: {copied} · Moved: {moved} · Skipped: {skipped}
-                          {failed > 0 ? ` · Failed: ${failed}` : ""}
-                        </p>
-                      ) : null}
-                      {task.type === "bulk_delete" && total > 0 ? (
-                        <p className="text-[11px] text-muted-foreground">
-                          Deleted: {deleted}/{total}
-                        </p>
-                      ) : null}
-                      {task.type === "thumbnail_generate" ? (
-                        <p className="text-[11px] text-muted-foreground">
-                          Thumbnail generation
-                        </p>
-                      ) : null}
-                      {task.type !== "object_transfer" &&
-                      task.type !== "bulk_delete" &&
-                      task.type !== "thumbnail_generate" &&
-                      total > 0 ? (
-                        <p className="text-[11px] text-muted-foreground">
-                          Processed: {completedUnits}/{total}
-                        </p>
-                      ) : null}
-                      {total > 0 && task.status !== "failed" && (
-                        <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                          <div
-                            className="h-full rounded-full bg-primary transition-all"
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
-                      )}
-                      {task.status === "failed" && task.lastError ? (
-                        <p className="mt-1 line-clamp-2 text-[11px] text-destructive">
-                          {task.lastError}
-                        </p>
-                      ) : null}
-                    </div>
-                  )
-                })}
+                {tasks.map((task) => (
+                  <Link
+                    key={task.id}
+                    href="/dashboard/tasks"
+                    className="block truncate rounded-sm bg-muted/40 px-2 py-1.5 text-xs font-medium hover:bg-muted/60"
+                  >
+                    {task.title}
+                  </Link>
+                ))}
               </div>
             )}
           </div>
