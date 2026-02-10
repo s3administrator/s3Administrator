@@ -13,6 +13,7 @@ const createPlanSchema = z.object({
   fileLimit: z.number().int().min(0),
   features: z.array(z.string()).default([]),
   thumbnailCache: z.boolean().default(false),
+  transferTasks: z.boolean().default(false),
   sortOrder: z.number().int().default(0),
 })
 
@@ -48,7 +49,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid input", details: parsed.error.issues }, { status: 400 })
   }
 
-  const { slug, name, priceMonthly, bucketLimit, fileLimit, features, thumbnailCache, sortOrder } = parsed.data
+  const {
+    slug,
+    name,
+    priceMonthly,
+    bucketLimit,
+    fileLimit,
+    features,
+    thumbnailCache,
+    transferTasks,
+    sortOrder,
+  } = parsed.data
 
   const existing = await prisma.plan.findUnique({ where: { slug } })
   if (existing) {
@@ -84,6 +95,7 @@ export async function POST(req: NextRequest) {
       fileLimit,
       features,
       thumbnailCache,
+      transferTasks,
       sortOrder,
     },
   })

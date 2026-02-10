@@ -24,6 +24,10 @@ import {
 } from "@/lib/thumbnail-storage"
 import { deleteMediaThumbnailsForKeys } from "@/lib/media-thumbnails"
 import { isThumbnailCacheEnabledForUser } from "@/lib/thumbnail-cache-policy"
+import {
+  getObjectTransferDisabledMessage,
+  isObjectTransferEnabledForUser,
+} from "@/lib/transfer-task-policy"
 import { logUserAuditAction } from "@/lib/audit-logger"
 
 const CHUNK_SIZE = 500
@@ -763,6 +767,28 @@ export async function POST() {
           },
         })
         return NextResponse.json({ processed: false, message: "Invalid object transfer payload" })
+      }
+
+      const transferEnabled = await isObjectTransferEnabledForUser(session.user.id)
+      if (!transferEnabled) {
+        await prisma.backgroundTask.update({
+          where: { id: candidate.id },
+          data: {
+            status: "failed",
+            attempts: candidate.attempts + 1,
+            completedAt: new Date(),
+            nextRunAt: new Date(),
+            lastError: getObjectTransferDisabledMessage(),
+          },
+        })
+
+        return NextResponse.json({
+          processed: true,
+          taskId: candidate.id,
+          done: true,
+          type: "object_transfer",
+          skipped: "transfer_disabled_for_plan",
+        })
       }
 
       const progress = parseObjectTransferProgress(candidate.progress)

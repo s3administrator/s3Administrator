@@ -14,6 +14,7 @@ export async function GET() {
       fileLimit: true,
       features: true,
       thumbnailCache: true,
+      transferTasks: true,
       stripePriceId: true,
     },
   })

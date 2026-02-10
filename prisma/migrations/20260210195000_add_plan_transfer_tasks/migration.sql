@@ -1,0 +1,2 @@
+ALTER TABLE "Plan"
+ADD COLUMN "transferTasks" BOOLEAN NOT NULL DEFAULT false;

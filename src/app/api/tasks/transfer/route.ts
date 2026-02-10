@@ -3,6 +3,10 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/db"
 import { getS3Client } from "@/lib/s3"
 import { getTierLimits } from "@/lib/tiers"
+import {
+  getObjectTransferDisabledMessage,
+  isObjectTransferEnabledForUser,
+} from "@/lib/transfer-task-policy"
 import { transferTaskSchema } from "@/lib/validations"
 import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
 
@@ -32,6 +36,14 @@ export async function POST(request: NextRequest) {
     const limitResult = rateLimitByUser(session.user.id, "task-transfer-create", 20, 60_000)
     if (!limitResult.success) {
       return rateLimitResponse(limitResult.retryAfterSeconds)
+    }
+
+    const transferEnabled = await isObjectTransferEnabledForUser(session.user.id)
+    if (!transferEnabled) {
+      return NextResponse.json(
+        { error: getObjectTransferDisabledMessage() },
+        { status: 403 }
+      )
     }
 
     const body = await request.json()

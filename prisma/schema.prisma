@@ -206,6 +206,7 @@ model Plan {
   fileLimit     Int      @default(1000)
   features      String[] @default([])
   thumbnailCache Boolean @default(false)
+  transferTasks Boolean @default(false)
   isActive      Boolean  @default(true)
   sortOrder     Int      @default(0)
 

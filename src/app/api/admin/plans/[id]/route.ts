@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db"
 import { stripe } from "@/lib/stripe"
 import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
 import { enforceThumbnailCachePolicyForUser } from "@/lib/thumbnail-cache-policy"
+import { enforceObjectTransferPolicyForUser } from "@/lib/transfer-task-policy"
 import { z } from "zod/v4"
 
 const updatePlanSchema = z.object({
@@ -13,6 +14,7 @@ const updatePlanSchema = z.object({
   fileLimit: z.number().int().min(0).optional(),
   features: z.array(z.string()).optional(),
   thumbnailCache: z.boolean().optional(),
+  transferTasks: z.boolean().optional(),
   isActive: z.boolean().optional(),
   sortOrder: z.number().int().optional(),
 })
@@ -86,10 +88,14 @@ export async function PATCH(
     data,
   })
 
-  if (
+  const thumbnailPolicyChanged =
     parsed.data.thumbnailCache !== undefined &&
     parsed.data.thumbnailCache !== plan.thumbnailCache
-  ) {
+  const transferPolicyChanged =
+    parsed.data.transferTasks !== undefined &&
+    parsed.data.transferTasks !== plan.transferTasks
+
+  if (thumbnailPolicyChanged || transferPolicyChanged) {
     const [tierUsers, subscriptionUsers] = await Promise.all([
       prisma.user.findMany({
         where: { tier: updated.slug },
@@ -113,7 +119,12 @@ export async function PATCH(
     }
 
     for (const userId of affectedUserIds) {
-      await enforceThumbnailCachePolicyForUser(userId)
+      if (thumbnailPolicyChanged) {
+        await enforceThumbnailCachePolicyForUser(userId)
+      }
+      if (transferPolicyChanged) {
+        await enforceObjectTransferPolicyForUser(userId)
+      }
     }
   }
 

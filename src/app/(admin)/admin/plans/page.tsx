@@ -36,6 +36,7 @@ interface Plan {
   fileLimit: number
   features: string[]
   thumbnailCache: boolean
+  transferTasks: boolean
   isActive: boolean
   sortOrder: number
   _count: { subscriptions: number }
@@ -57,6 +58,7 @@ function PlanForm({
   const [fileLimit, setFileLimit] = useState(plan?.fileLimit?.toString() ?? "1000")
   const [features, setFeatures] = useState(plan?.features?.join("\n") ?? "")
   const [thumbnailCache, setThumbnailCache] = useState(plan?.thumbnailCache ?? false)
+  const [transferTasks, setTransferTasks] = useState(plan?.transferTasks ?? false)
   const [sortOrder, setSortOrder] = useState(plan?.sortOrder?.toString() ?? "0")
   const [saving, setSaving] = useState(false)
 
@@ -72,6 +74,7 @@ function PlanForm({
         fileLimit: parseInt(fileLimit, 10),
         features: features.split("\n").map((f) => f.trim()).filter(Boolean),
         thumbnailCache,
+        transferTasks,
         sortOrder: parseInt(sortOrder, 10),
       }
 
@@ -187,6 +190,14 @@ function PlanForm({
             />
             Enable thumbnail cache
           </label>
+          <label className="mt-2 flex items-center gap-2 text-sm">
+            <Checkbox
+              checked={transferTasks}
+              onCheckedChange={(checked) => setTransferTasks(checked === true)}
+              aria-label="Enable transfer tasks"
+            />
+            Enable transfer tasks
+          </label>
         </div>
       </div>
 
@@ -292,6 +303,7 @@ export default function AdminPlansPage() {
                 <TableHead>Price</TableHead>
                 <TableHead>Limits</TableHead>
                 <TableHead>Thumb Cache</TableHead>
+                <TableHead>Transfers</TableHead>
                 <TableHead>Subs</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -315,6 +327,11 @@ export default function AdminPlansPage() {
                   <TableCell>
                     <Badge variant={plan.thumbnailCache ? "default" : "secondary"}>
                       {plan.thumbnailCache ? "On" : "Off"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={plan.transferTasks ? "default" : "secondary"}>
+                      {plan.transferTasks ? "On" : "Off"}
                     </Badge>
                   </TableCell>
                   <TableCell>{plan._count.subscriptions}</TableCell>
@@ -383,7 +400,7 @@ export default function AdminPlansPage() {
               ))}
               {plans.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center text-muted-foreground">
+                  <TableCell colSpan={10} className="text-center text-muted-foreground">
                     No plans yet. Create one to get started.
                   </TableCell>
                 </TableRow>
