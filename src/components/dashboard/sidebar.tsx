@@ -88,7 +88,7 @@ function formatSize(bytes: number): string {
   return `${(bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0)} ${units[i]}`
 }
 
-export function Sidebar() {
+export function Sidebar({ className }: { className?: string }) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const queryClient = useQueryClient()
@@ -265,7 +265,12 @@ export function Sidebar() {
 
   return (
     <TooltipProvider>
-      <div className="flex h-full w-96 flex-col border-r bg-muted/30">
+      <div
+        className={cn(
+          "flex h-full w-80 min-w-0 flex-col border-r bg-muted/30 lg:w-96",
+          className
+        )}
+      >
         <div className="flex h-14 items-center justify-between border-b px-4">
           <Link href="/dashboard" className="flex items-center gap-2 font-semibold">
             <Database className="h-5 w-5" />
@@ -274,7 +279,7 @@ export function Sidebar() {
           <ThemeSwitcher />
         </div>
 
-        <ScrollArea className="flex-1 px-3 py-3">
+        <ScrollArea className="flex-1 px-2.5 py-2.5 sm:px-3 sm:py-3">
           <div className="mb-4 space-y-2">
             <div className="flex items-center justify-between px-2">
               <p className="text-xs font-medium text-muted-foreground">Buckets</p>
@@ -429,62 +434,62 @@ export function Sidebar() {
         </ScrollArea>
 
         <Separator />
-        <div className="space-y-1 p-3">
+        <div className="space-y-0.5 p-2 pb-16 sm:space-y-1 sm:p-3">
           <Link
             href="/dashboard"
             className={cn(
-              "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent",
+              "flex items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-accent sm:py-1.5 sm:text-sm",
               isOverviewActive && "bg-accent"
             )}
           >
-            <LayoutDashboard className="h-4 w-4" />
+            <LayoutDashboard className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             Overview
           </Link>
 
           <Link
             href="/dashboard/search"
             className={cn(
-              "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent",
+              "flex items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-accent sm:py-1.5 sm:text-sm",
               pathname === "/dashboard/search" && "bg-accent"
             )}
           >
-            <FileSearch className="h-4 w-4" />
+            <FileSearch className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             Search All Files
           </Link>
 
           <Link
             href="/audit-logs"
             className={cn(
-              "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent",
+              "flex items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-accent sm:py-1.5 sm:text-sm",
               pathname === "/audit-logs" && "bg-accent"
             )}
           >
-            <Activity className="h-4 w-4" />
+            <Activity className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             Audit Logs
           </Link>
 
           <Link
             href="/dashboard/tasks"
             className={cn(
-              "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent",
+              "flex items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-accent sm:py-1.5 sm:text-sm",
               isTasksActive && "bg-accent"
             )}
           >
-            <ListTodo className="h-4 w-4" />
+            <ListTodo className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             Tasks
           </Link>
 
-          <div className="rounded-md border p-2">
-            <div className="mb-1 flex items-center justify-between">
-              <p className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
-                <ListTodo className="h-3.5 w-3.5" />
+          <div className="rounded-md border p-1 sm:p-2">
+            <div className="mb-1 flex items-center justify-between sm:mb-2">
+              <p className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground sm:text-xs">
+                <ListTodo className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                 Tasks
               </p>
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-6 px-2 text-xs"
+                className="h-5 px-1.5 text-[10px] leading-none sm:h-6 sm:px-2 sm:text-xs"
                 onClick={() => {
                   void processTaskQueue()
                   queryClient.invalidateQueries({ queryKey: ["background-tasks"] })
@@ -494,16 +499,17 @@ export function Sidebar() {
               </Button>
             </div>
             {tasks.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No ongoing tasks</p>
+              <p className="px-1 text-[10px] text-muted-foreground sm:text-xs">No ongoing tasks</p>
             ) : (
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 {tasks.map((task) => (
                   <Link
                     key={task.id}
                     href="/dashboard/tasks"
-                    className="block truncate rounded-sm bg-muted/40 px-2 py-1.5 text-xs font-medium hover:bg-muted/60"
+                    className="block rounded-sm bg-muted/40 px-1.5 py-1 text-[10px] font-medium leading-4 hover:bg-muted/60 sm:px-2 sm:py-1.5 sm:text-xs"
+                    title={task.title}
                   >
-                    {task.title}
+                    <span className="line-clamp-2">{task.title}</span>
                   </Link>
                 ))}
               </div>
@@ -513,41 +519,41 @@ export function Sidebar() {
             <Link
               href="/admin"
               className={cn(
-                "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent",
+                "flex items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-accent sm:py-1.5 sm:text-sm",
                 pathname === "/admin" && "bg-accent"
               )}
             >
-              <Shield className="h-4 w-4" />
+              <Shield className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               Admin
             </Link>
           )}
           <Link
             href="/settings"
             className={cn(
-              "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent",
+              "flex items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-accent sm:py-1.5 sm:text-sm",
               pathname === "/settings" && "bg-accent"
             )}
           >
-            <Settings className="h-4 w-4" />
+            <Settings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             Settings
           </Link>
           <Link
             href="/billing"
             className={cn(
-              "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent",
+              "flex items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-accent sm:py-1.5 sm:text-sm",
               pathname === "/billing" && "bg-accent"
             )}
           >
-            <CreditCard className="h-4 w-4" />
+            <CreditCard className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             Billing
           </Link>
           <Button
             variant="ghost"
             size="sm"
-            className="w-full justify-start gap-2 px-2"
+            className="h-8 w-full justify-start gap-2 px-2 text-xs sm:h-9 sm:text-sm"
             onClick={() => signOut({ callbackUrl: "/" })}
           >
-            <LogOut className="h-4 w-4" />
+            <LogOut className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             Sign Out
           </Button>
         </div>

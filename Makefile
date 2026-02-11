@@ -1,9 +1,11 @@
 .PHONY: help \
 	prod-setup prod-start prod-stop prod-restart prod-migrate \
-	dev-setup dev-start dev-stop dev-restart dev-migrate dev-local dev-reset
+	dev-setup dev-start dev-stop dev-restart dev-migrate dev-local dev-reset \
+	log
 
 DC_DEV  = docker compose --env-file .env.dev -f docker/docker-compose.yml
 DC_PROD = docker compose --env-file .env.prod -f docker/docker-compose.yml
+ENV ?= dev
 
 help: ## Show available commands
 	@echo ""
@@ -14,6 +16,10 @@ help: ## Show available commands
 	@echo "  Development"
 	@echo "  ──────────────────────────────────────"
 	@grep -E '^dev-[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
+	@echo ""
+	@echo "  Utilities"
+	@echo "  ──────────────────────────────────────"
+	@grep -E '^log:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 
 # ─── Production ──────────────────────────────────────────
@@ -100,3 +106,13 @@ dev-migrate: ## Run migrations & seed on development DB
 	$(DC_DEV) run --rm -T tools npx --no-install prisma migrate deploy
 	$(DC_DEV) run --rm -T tools npx --no-install prisma db seed
 	@echo "✓ Development migrations applied & seeded."
+
+log: ## Tail app service logs (set ENV=prod for production, default: dev)
+	@if [ "$(ENV)" = "prod" ]; then \
+		$(DC_PROD) logs -f --tail=200 app; \
+	elif [ "$(ENV)" = "dev" ]; then \
+		$(DC_DEV) logs -f --tail=200 app; \
+	else \
+		echo "ERROR: ENV must be either 'dev' or 'prod' (got: $(ENV))"; \
+		exit 1; \
+	fi

@@ -40,7 +40,7 @@ export default function AdminLogsPage() {
   const [page, setPage] = useState(1)
   const [query, setQuery] = useState("")
   const [source, setSource] = useState("all")
-  const [level, setLevel] = useState("error")
+  const [level, setLevel] = useState("all")
   const [dateFrom, setDateFrom] = useState("")
   const [dateTo, setDateTo] = useState("")
   const [sortBy, setSortBy] = useState<SortField>("createdAt")
@@ -98,7 +98,7 @@ export default function AdminLogsPage() {
     setPage(1)
     setQuery("")
     setSource("all")
-    setLevel("error")
+    setLevel("all")
     setDateFrom("")
     setDateTo("")
     setSortBy("createdAt")
@@ -323,4 +323,3 @@ export default function AdminLogsPage() {
     </div>
   )
 }
-

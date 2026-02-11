@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { ListTodo, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import {
@@ -34,6 +35,13 @@ interface TaskRow {
   title: string
   status: "pending" | "in_progress" | "completed" | "failed"
   updatedAt: string
+}
+
+function getStatusVariant(status: TaskRow["status"]): "default" | "secondary" | "destructive" | "outline" {
+  if (status === "completed") return "default"
+  if (status === "failed") return "destructive"
+  if (status === "in_progress") return "secondary"
+  return "outline"
 }
 
 const FOLDER_OPERATIONS: Array<{ value: TaskOperation; label: string }> = [
@@ -246,17 +254,17 @@ export default function TasksPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">
-          <div className="rounded-md border p-3">
+          <div className="flex h-full flex-col rounded-md border p-3">
             <p className="mb-2 text-sm font-medium">Between 2 folders (cross bucket possible)</p>
-            <ul className="space-y-1 text-sm text-muted-foreground">
+            <ul className="list-disc space-y-1 pl-4 text-sm text-muted-foreground">
               <li>Sync</li>
               <li>One-time copy</li>
               <li>One-time move</li>
             </ul>
           </div>
-          <div className="rounded-md border p-3">
+          <div className="flex h-full flex-col rounded-md border p-3">
             <p className="mb-2 text-sm font-medium">Between 2 buckets</p>
-            <ul className="space-y-1 text-sm text-muted-foreground">
+            <ul className="list-disc space-y-1 pl-4 text-sm text-muted-foreground">
               <li>Sync</li>
               <li>One-time copy</li>
               <li>Migrate</li>
@@ -266,12 +274,24 @@ export default function TasksPage() {
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Start New Task</CardTitle>
-          <CardDescription>
-            Transfers run on cached files only and follow plan limits. Sync tasks run continuously every
-            minute until deleted.
-          </CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+          <div className="space-y-1">
+            <CardTitle>Start New Task</CardTitle>
+            <CardDescription>
+              Transfers run on cached files only and follow plan limits. Sync tasks run continuously every
+              minute until deleted.
+            </CardDescription>
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => void handlePollTasks()}
+            disabled={polling}
+            className="h-7 shrink-0 px-2 text-[11px] sm:h-8 sm:px-3 sm:text-xs"
+          >
+            <RefreshCw className={`mr-1 h-3.5 w-3.5 ${polling ? "animate-spin" : ""}`} />
+            <span className="sm:hidden">Poll</span>
+            <span className="hidden sm:inline">Process Queue</span>
+          </Button>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
@@ -399,13 +419,13 @@ export default function TasksPage() {
             </div>
           ) : null}
 
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={() => void handleStartTask()} disabled={submitting}>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              onClick={() => void handleStartTask()}
+              disabled={submitting}
+              className="w-full sm:w-auto"
+            >
               {submitting ? "Starting..." : "Start Task"}
-            </Button>
-            <Button variant="outline" onClick={() => void handlePollTasks()} disabled={polling}>
-              <RefreshCw className={`mr-2 h-4 w-4 ${polling ? "animate-spin" : ""}`} />
-              Process Queue
             </Button>
           </div>
         </CardContent>
@@ -422,10 +442,16 @@ export default function TasksPage() {
           ) : (
             <div className="space-y-2">
               {(tasksData?.tasks ?? []).map((task) => (
-                <div key={task.id} className="rounded-md border px-3 py-2">
-                  <p className="text-sm font-medium">{task.title}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {task.status} · {new Date(task.updatedAt).toLocaleString()}
+                <div key={task.id} className="relative rounded-md border px-3 py-2 pr-24">
+                  <Badge
+                    variant={getStatusVariant(task.status)}
+                    className="absolute right-3 top-2 h-5 px-1.5 text-[10px] capitalize sm:h-6 sm:px-2 sm:text-xs"
+                  >
+                    {task.status.replace("_", " ")}
+                  </Badge>
+                  <p className="min-w-0 text-sm font-medium leading-5">{task.title}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {new Date(task.updatedAt).toLocaleString()}
                   </p>
                 </div>
               ))}
