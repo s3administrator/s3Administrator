@@ -11,6 +11,7 @@ import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
 
 type TransferScope = "folder" | "bucket"
 type TransferOperation = "sync" | "copy" | "move" | "migrate"
+const SYNC_POLL_INTERVAL_SECONDS = 60
 
 function normalizeFolderPrefix(raw: string | undefined): string {
   const value = (raw ?? "").trim()
@@ -120,7 +121,7 @@ export async function POST(request: NextRequest) {
       where: sourceWhere,
     })
 
-    if (sourceCachedFileCount === 0) {
+    if (sourceCachedFileCount === 0 && operation !== "sync") {
       return NextResponse.json(
         { error: "No cached source files matched this task" },
         { status: 400 }
@@ -175,6 +176,7 @@ export async function POST(request: NextRequest) {
           destinationCredentialId: destinationCredential.id,
           destinationBucket,
           destinationPrefix: normalizedDestinationPrefix || null,
+          pollIntervalSeconds: operation === "sync" ? SYNC_POLL_INTERVAL_SECONDS : null,
         },
         progress: {
           phase: "transfer",

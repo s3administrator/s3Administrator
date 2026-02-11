@@ -33,6 +33,7 @@ const CHUNK_SIZE = 500
 const TRANSFER_CHUNK_SIZE = 100
 const LOCK_SECONDS = 20
 const THUMBNAIL_TIMEOUT_MS = 5_000
+const SYNC_POLL_INTERVAL_SECONDS = 60
 
 interface BulkDeleteTaskPayload {
   query: string
@@ -65,6 +66,7 @@ interface ObjectTransferTaskPayload {
   destinationCredentialId: string
   destinationBucket: string
   destinationPrefix: string | null
+  pollIntervalSeconds: number | null
 }
 
 interface ObjectTransferTaskProgress {
@@ -166,6 +168,7 @@ function parseObjectTransferPayload(raw: unknown): ObjectTransferTaskPayload | n
     destinationCredentialId?: unknown
     destinationBucket?: unknown
     destinationPrefix?: unknown
+    pollIntervalSeconds?: unknown
   }
 
   const scope = payload.scope
@@ -204,6 +207,13 @@ function parseObjectTransferPayload(raw: unknown): ObjectTransferTaskPayload | n
     }
   }
 
+  const pollIntervalSeconds =
+    typeof payload.pollIntervalSeconds === "number" &&
+    Number.isFinite(payload.pollIntervalSeconds) &&
+    payload.pollIntervalSeconds >= SYNC_POLL_INTERVAL_SECONDS
+      ? Math.floor(payload.pollIntervalSeconds)
+      : null
+
   return {
     scope,
     operation,
@@ -213,7 +223,16 @@ function parseObjectTransferPayload(raw: unknown): ObjectTransferTaskPayload | n
     destinationCredentialId: payload.destinationCredentialId.trim(),
     destinationBucket: payload.destinationBucket.trim(),
     destinationPrefix,
+    pollIntervalSeconds,
   }
+}
+
+function getSyncPollIntervalMs(payload: ObjectTransferTaskPayload): number {
+  const seconds =
+    payload.pollIntervalSeconds && payload.pollIntervalSeconds >= SYNC_POLL_INTERVAL_SECONDS
+      ? payload.pollIntervalSeconds
+      : SYNC_POLL_INTERVAL_SECONDS
+  return seconds * 1000
 }
 
 function parseObjectTransferProgress(
@@ -821,6 +840,71 @@ export async function POST() {
       if (sourceBatch.length === 0) {
         const total = progress.total > 0 ? progress.total : progress.processed
         await rebuildUserExtensionStats(session.user.id)
+
+        if (transferPayload.operation === "sync") {
+          const nextRunAt = new Date(Date.now() + getSyncPollIntervalMs(transferPayload))
+          await prisma.backgroundTask.update({
+            where: { id: candidate.id },
+            data: {
+              status: "pending",
+              attempts: 0,
+              completedAt: null,
+              nextRunAt,
+              progress: {
+                phase: "transfer",
+                total: 0,
+                processed: 0,
+                copied: 0,
+                moved: 0,
+                deleted: 0,
+                skipped: 0,
+                failed: 0,
+                remaining: 0,
+                cursorKey: null,
+              } as Prisma.InputJsonObject,
+              lastError: null,
+            },
+          })
+
+          await logUserAuditAction({
+            userId: session.user.id,
+            eventType: "s3_action",
+            eventName: "object_transfer_sync_cycle_completed",
+            path: "/api/tasks/process",
+            method: "POST",
+            target: `${transferPayload.sourceBucket} -> ${transferPayload.destinationBucket}`,
+            metadata: {
+              scope: transferPayload.scope,
+              operation: transferPayload.operation,
+              sourceCredentialId: transferPayload.sourceCredentialId,
+              sourceBucket: transferPayload.sourceBucket,
+              sourcePrefix: transferPayload.sourcePrefix,
+              destinationCredentialId: transferPayload.destinationCredentialId,
+              destinationBucket: transferPayload.destinationBucket,
+              destinationPrefix: transferPayload.destinationPrefix,
+              nextRunAt: nextRunAt.toISOString(),
+              intervalSeconds: getSyncPollIntervalMs(transferPayload) / 1000,
+              progress: {
+                total,
+                processed: progress.processed,
+                copied: progress.copied,
+                moved: progress.moved,
+                deleted: progress.deleted,
+                skipped: progress.skipped,
+                failed: progress.failed,
+              },
+            },
+          })
+
+          return NextResponse.json({
+            processed: true,
+            taskId: candidate.id,
+            done: false,
+            type: "object_transfer",
+            recurring: true,
+            nextRunAt: nextRunAt.toISOString(),
+          })
+        }
 
         await prisma.backgroundTask.update({
           where: { id: candidate.id },

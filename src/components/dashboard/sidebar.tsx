@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { signOut, useSession } from "next-auth/react"
 import { toast } from "sonner"
@@ -143,6 +143,7 @@ export function Sidebar() {
     },
   })
   const tasks = tasksData?.tasks ?? []
+  const hasRunnableTasks = tasks.some((task) => task.status === "pending" || task.status === "in_progress")
 
   const statsByBucket = useMemo(
     () =>
@@ -230,11 +231,19 @@ export function Sidebar() {
 
   const processTaskQueue = useCallback(async () => {
     try {
-      const res = await fetch("/api/tasks/process", { method: "POST" })
-      if (!res.ok) return
+      let processedAny = false
+      for (let i = 0; i < 40; i++) {
+        const res = await fetch("/api/tasks/process", { method: "POST" })
+        if (!res.ok) break
 
-      const data = await res.json()
-      if (data?.processed) {
+        const data = await res.json()
+        if (!data?.processed) {
+          break
+        }
+        processedAny = true
+      }
+
+      if (processedAny) {
         queryClient.invalidateQueries({ queryKey: ["background-tasks"] })
         queryClient.invalidateQueries({ queryKey: ["bucket-stats"] })
         queryClient.invalidateQueries({ queryKey: ["objects"] })
@@ -243,6 +252,16 @@ export function Sidebar() {
       // Background processing can fail temporarily; it will retry on next poll.
     }
   }, [queryClient])
+
+  useEffect(() => {
+    if (!hasRunnableTasks) return
+
+    const interval = window.setInterval(() => {
+      void processTaskQueue()
+    }, 60_000)
+
+    return () => window.clearInterval(interval)
+  }, [hasRunnableTasks, processTaskQueue])
 
   return (
     <TooltipProvider>

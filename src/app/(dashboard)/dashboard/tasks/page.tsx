@@ -213,7 +213,12 @@ export default function TasksPage() {
   async function handlePollTasks() {
     setPolling(true)
     try {
-      await fetch("/api/tasks/process", { method: "POST" })
+      for (let i = 0; i < 40; i++) {
+        const res = await fetch("/api/tasks/process", { method: "POST" })
+        if (!res.ok) break
+        const data = await res.json()
+        if (!data?.processed) break
+      }
       queryClient.invalidateQueries({ queryKey: ["background-tasks"] })
       void refetchTasks()
     } finally {
@@ -263,7 +268,10 @@ export default function TasksPage() {
       <Card>
         <CardHeader>
           <CardTitle>Start New Task</CardTitle>
-          <CardDescription>Transfers run on cached files only and follow plan limits.</CardDescription>
+          <CardDescription>
+            Transfers run on cached files only and follow plan limits. Sync tasks run continuously every
+            minute until deleted.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
