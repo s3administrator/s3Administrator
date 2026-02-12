@@ -1,0 +1,14 @@
+repos:
+  - repo: https://github.com/semgrep/pre-commit
+    rev: v1.151.0
+    hooks:
+      - id: semgrep
+        args:
+          - --config
+          - p/security-audit
+          - --error
+  - repo: https://github.com/google/osv-scanner
+    rev: v2.0.2
+    hooks:
+      - id: osv-scanner
+        args: ["--lockfile", "package-lock.json"]

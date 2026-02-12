@@ -35,6 +35,24 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 
+## Security Scanning (Semgrep pre-commit)
+
+This repository includes a pre-commit hook configuration for Semgrep in `.pre-commit-config.yaml`.
+
+Setup:
+
+```bash
+pre-commit install
+```
+
+Run on all files:
+
+```bash
+pre-commit run semgrep --all-files
+```
+
+The hook is configured with `p/security-audit` and runs automatically on staged files before each commit.
+
 ## Gallery Mode and Video Thumbnails
 
 The dashboard supports `List` and `Gallery` mode.
