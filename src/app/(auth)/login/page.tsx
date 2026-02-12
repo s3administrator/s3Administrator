@@ -46,17 +46,36 @@ export default function LoginPage() {
 
   async function handleEmailSignIn(e: React.FormEvent) {
     e.preventDefault()
-    if (!email) return
+    const normalizedEmail = email.trim()
+    if (!normalizedEmail) return
 
     setIsLoading(true)
+    setAuthErrorMessage(null)
     try {
+      const devLoginResponse = await fetch("/api/auth/dev-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: normalizedEmail }),
+      })
+
+      if (devLoginResponse.ok) {
+        window.location.assign("/dashboard")
+        return
+      }
+
+      if (devLoginResponse.status !== 404) {
+        throw new Error("dev_login_failed")
+      }
+
       await signIn("resend", {
-        email,
+        email: normalizedEmail,
         redirect: false,
         callbackUrl: "/dashboard",
       })
-      router.push(`/verify?email=${encodeURIComponent(email)}`)
+      router.push(`/verify?email=${encodeURIComponent(normalizedEmail)}`)
     } catch {
+      setAuthErrorMessage("Sign in failed. Please try again.")
+    } finally {
       setIsLoading(false)
     }
   }
