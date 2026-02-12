@@ -153,10 +153,10 @@ export default function AdminActionsPage() {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">User Actions</h1>
+          <h1 className="text-xl font-bold sm:text-2xl">User Actions</h1>
           <p className="text-sm text-muted-foreground">
             {data?.total ?? 0} tracked events
           </p>

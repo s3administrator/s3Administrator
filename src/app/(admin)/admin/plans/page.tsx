@@ -103,7 +103,7 @@ function PlanForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="slug">Slug</Label>
           <Input
@@ -127,7 +127,7 @@ function PlanForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid gap-4 sm:grid-cols-3">
         <div className="space-y-2">
           <Label htmlFor="price">Price ($/month)</Label>
           <Input
@@ -163,7 +163,7 @@ function PlanForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="features">Features (one per line)</Label>
           <textarea
@@ -262,22 +262,22 @@ export default function AdminPlansPage() {
   const plans = data?.plans ?? []
 
   return (
-    <div className="p-6">
-      <div className="mb-6 flex items-center justify-between">
+    <div className="p-4 sm:p-6">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Plans</h1>
+          <h1 className="text-xl font-bold sm:text-2xl">Plans</h1>
           <p className="text-sm text-muted-foreground">
             Manage subscription plans. Stripe prices are created automatically.
           </p>
         </div>
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogTrigger asChild>
-            <Button>
+            <Button className="w-full sm:w-auto">
               <Plus className="mr-2 h-4 w-4" />
               Create Plan
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-lg">
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>Create Plan</DialogTitle>
             </DialogHeader>
@@ -374,7 +374,7 @@ export default function AdminPlansPage() {
                             <Pencil className="h-4 w-4" />
                           </Button>
                         </DialogTrigger>
-                        <DialogContent className="sm:max-w-lg">
+                        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
                           <DialogHeader>
                             <DialogTitle>Edit Plan: {plan.name}</DialogTitle>
                           </DialogHeader>

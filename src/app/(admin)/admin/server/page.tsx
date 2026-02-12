@@ -297,9 +297,9 @@ export default function AdminServerPage() {
   )
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">Server Metrics</h1>
+        <h1 className="text-xl font-bold sm:text-2xl">Server Metrics</h1>
         <p className="text-sm text-muted-foreground">
           Host and app container resource usage sampled every minute
         </p>

@@ -97,9 +97,9 @@ export default function AdminUsersPage() {
   const totalPages = data ? Math.ceil(data.total / data.limit) : 1
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">Users</h1>
+        <h1 className="text-xl font-bold sm:text-2xl">Users</h1>
         <p className="text-sm text-muted-foreground">
           {data?.total ?? 0} total users
         </p>
@@ -202,7 +202,7 @@ export default function AdminUsersPage() {
           </div>
 
           {totalPages > 1 && (
-            <div className="mt-4 flex items-center justify-end gap-2">
+            <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
               <Button
                 variant="outline"
                 size="sm"

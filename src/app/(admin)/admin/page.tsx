@@ -41,9 +41,9 @@ export default function AdminPage() {
   })
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">Overview</h1>
+        <h1 className="text-xl font-bold sm:text-2xl">Overview</h1>
         <p className="text-sm text-muted-foreground">
           Key metrics for usage, activity, and reliability
         </p>

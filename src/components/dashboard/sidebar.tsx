@@ -41,6 +41,8 @@ import {
   FileSearch,
   ListTodo,
   Activity,
+  ChevronsLeft,
+  ChevronsRight,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ThemeSwitcher } from "@/components/theme-switcher"
@@ -88,16 +90,24 @@ function formatSize(bytes: number): string {
   return `${(bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0)} ${units[i]}`
 }
 
-export function Sidebar({ className }: { className?: string }) {
+export function Sidebar({
+  className,
+  collapsible = true,
+}: {
+  className?: string
+  collapsible?: boolean
+}) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const queryClient = useQueryClient()
   const { data: session } = useSession()
+  const [isCollapsed, setIsCollapsed] = useState(false)
   const [isSyncingAll, setIsSyncingAll] = useState(false)
   const [bucketSearch, setBucketSearch] = useState("")
   const [bucketSortField, setBucketSortField] = useState<"name" | "size" | "fileCount">("name")
   const [bucketSortDir, setBucketSortDir] = useState<"asc" | "desc">("asc")
   const [selectedCredentials, setSelectedCredentials] = useState<string[]>([])
+  const sidebarCollapsed = collapsible && isCollapsed
   const isAdmin = session?.user?.role === "admin"
   const isOverviewActive =
     pathname === "/dashboard" &&
