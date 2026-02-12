@@ -73,8 +73,10 @@ export function GoogleAnalytics({ measurementId }: { measurementId?: string }) {
       />
       <Script id="ga4-init" strategy="afterInteractive">
         {`
-          gtag('js', new Date());
-          gtag('config', '${measurementId}', { send_page_view: false });
+          window.dataLayer = window.dataLayer || [];
+          window.gtag = window.gtag || function(){window.dataLayer.push(arguments);};
+          window.gtag('js', new Date());
+          window.gtag('config', '${measurementId}', { send_page_view: false });
         `}
       </Script>
     </>

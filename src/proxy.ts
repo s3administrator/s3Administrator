@@ -17,6 +17,7 @@ function shouldLogApiRequest(pathname: string) {
 
 export default auth((req) => {
   const { pathname } = req.nextUrl
+  const isPublicAnalyticsEndpoint = pathname === "/api/analytics/events"
 
   if (shouldLogApiRequest(pathname)) {
     void logSystemEvent({
@@ -29,6 +30,12 @@ export default auth((req) => {
         authenticated: Boolean(req.auth?.user?.id),
       },
     })
+  }
+
+  // Analytics ingestion is intentionally public so unauthenticated pages
+  // (like /login) can submit page/click events without auth redirects/CORS noise.
+  if (isPublicAnalyticsEndpoint) {
+    return NextResponse.next()
   }
 
   if (!req.auth) {

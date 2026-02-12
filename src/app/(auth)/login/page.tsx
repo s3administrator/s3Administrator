@@ -22,6 +22,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [oauthLoading, setOauthLoading] = useState<string | null>(null)
+  const [authErrorMessage, setAuthErrorMessage] = useState<string | null>(null)
   const { status } = useSession()
   const router = useRouter()
 
@@ -30,6 +31,18 @@ export default function LoginPage() {
       router.replace("/dashboard")
     }
   }, [status, router])
+
+  useEffect(() => {
+    const authError = new URLSearchParams(window.location.search).get("error")
+    const message =
+      authError === "OAuthAccountNotLinked"
+        ? "This email is already used by another sign-in method. Try signing in with your existing method first, then connect this provider."
+        : authError
+          ? "Sign in failed. Please try again."
+          : null
+
+    setAuthErrorMessage(message)
+  }, [])
 
   async function handleEmailSignIn(e: React.FormEvent) {
     e.preventDefault()
@@ -66,6 +79,12 @@ export default function LoginPage() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {authErrorMessage ? (
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {authErrorMessage}
+          </div>
+        ) : null}
+
         <form onSubmit={handleEmailSignIn} className="space-y-3">
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
@@ -97,6 +116,7 @@ export default function LoginPage() {
 
         <div className="space-y-2">
           <Button
+            type="button"
             variant="outline"
             className="w-full"
             onClick={() => handleOAuthSignIn("github")}
@@ -110,6 +130,7 @@ export default function LoginPage() {
             Continue with GitHub
           </Button>
           <Button
+            type="button"
             variant="outline"
             className="w-full"
             onClick={() => handleOAuthSignIn("google")}
