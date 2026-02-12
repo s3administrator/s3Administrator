@@ -6,9 +6,9 @@
     "node": ">=20.9.0"
   },
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "dev": "node scripts/next-with-env.mjs dev",
+    "build": "node scripts/next-with-env.mjs build",
+    "start": "node scripts/next-with-env.mjs start",
     "lint": "eslint"
   },
   "dependencies": {

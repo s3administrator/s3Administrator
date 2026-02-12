@@ -8,6 +8,13 @@ import { ThemeProvider } from "@/components/providers/theme-provider"
 import { GoogleAnalytics } from "@/components/providers/google-analytics"
 import { ActionTracker } from "@/components/providers/action-tracker"
 import { ConsentBanner } from "@/components/providers/consent-banner"
+import {
+  DEFAULT_SITE_DESCRIPTION,
+  DEFAULT_SITE_TITLE,
+  DEFAULT_OG_IMAGE_PATH,
+  SITE_NAME,
+} from "@/lib/seo"
+import { getSiteUrlObject } from "@/lib/site-url"
 import "./globals.css"
 
 const geistSans = Geist({
@@ -21,8 +28,33 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: "S3 Admin",
-  description: "Manage your S3 storage across any provider with ease",
+  metadataBase: getSiteUrlObject(),
+  title: {
+    default: DEFAULT_SITE_TITLE,
+    template: `%s | ${SITE_NAME}`,
+  },
+  description: DEFAULT_SITE_DESCRIPTION,
+  openGraph: {
+    title: DEFAULT_SITE_TITLE,
+    description: DEFAULT_SITE_DESCRIPTION,
+    url: "/",
+    siteName: SITE_NAME,
+    type: "website",
+    images: [
+      {
+        url: DEFAULT_OG_IMAGE_PATH,
+        width: 1200,
+        height: 630,
+        alt: `${SITE_NAME} social image`,
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: DEFAULT_SITE_TITLE,
+    description: DEFAULT_SITE_DESCRIPTION,
+    images: [DEFAULT_OG_IMAGE_PATH],
+  },
 }
 
 export default function RootLayout({

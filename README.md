@@ -81,3 +81,32 @@ The production app container installs `ffmpeg` and generates thumbnails in-proce
 
 - max 2 concurrent ffmpeg jobs per app instance
 - 5 second timeout per thumbnail job
+
+## SEO and Discovery
+
+The app exposes SEO metadata routes:
+
+- `/robots.txt`
+- `/sitemap.xml`
+
+Set canonical host via env:
+
+```bash
+NEXT_PUBLIC_SITE_URL=https://www.s3administrator.com
+```
+
+Post-deploy checklist:
+
+1. Verify the domain in Google Search Console.
+2. Submit `https://www.s3administrator.com/sitemap.xml`.
+3. Confirm `robots.txt` allows public marketing pages and blocks private app/API paths.
+4. Monitor indexing coverage and non-brand query impressions weekly.
+
+## Environment Selection
+
+Application scripts load env files based on `ENVIRONMENT`:
+
+- `ENVIRONMENT=DEV` -> `.env.dev`
+- `ENVIRONMENT=PROD` -> `.env.prod`
+
+`DATABASE_URL` is required and the app build/start scripts fail fast when it is missing or empty.

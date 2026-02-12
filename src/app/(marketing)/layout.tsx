@@ -1,16 +1,12 @@
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { ThemeSwitcher } from "@/components/theme-switcher"
-import { auth } from "@/lib/auth"
 
-export default async function MarketingLayout({
+export default function MarketingLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const session = await auth()
-  const isAuthenticated = Boolean(session?.user?.id)
-
   return (
     <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -20,6 +16,24 @@ export default async function MarketingLayout({
           </Link>
           <nav className="flex items-center gap-4">
             <Link
+              href="/features"
+              className="text-sm text-muted-foreground hover:text-foreground"
+            >
+              Features
+            </Link>
+            <Link
+              href="/providers"
+              className="text-sm text-muted-foreground hover:text-foreground"
+            >
+              Providers
+            </Link>
+            <Link
+              href="/compare"
+              className="text-sm text-muted-foreground hover:text-foreground"
+            >
+              Compare
+            </Link>
+            <Link
               href="/pricing"
               className="text-sm text-muted-foreground hover:text-foreground"
             >
@@ -27,9 +41,7 @@ export default async function MarketingLayout({
             </Link>
             <ThemeSwitcher />
             <Button size="sm" asChild>
-              <Link href={isAuthenticated ? "/dashboard" : "/login"}>
-                {isAuthenticated ? "Dashboard" : "Sign In"}
-              </Link>
+              <Link href="/login">Sign In</Link>
             </Button>
           </nav>
         </div>
