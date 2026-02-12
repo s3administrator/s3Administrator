@@ -1,4 +1,8 @@
-{$DOMAIN}, {$ROOT_DOMAIN} {
+{$ROOT_DOMAIN} {
+  redir https://{$DOMAIN}{uri} permanent
+}
+
+{$DOMAIN} {
   encode zstd gzip
 
   header {
