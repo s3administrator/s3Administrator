@@ -10,20 +10,20 @@ services:
       - "3000:3000"
     environment:
       - ENVIRONMENT=${ENVIRONMENT:-DEV}
-      - DATABASE_URL=postgresql://s3admin:${POSTGRES_PASSWORD}@db:5432/s3_admin
+      - DATABASE_URL=${DATABASE_URL_DOCKER:-postgresql://s3admin:${POSTGRES_PASSWORD}@db:5432/s3_admin}
       - AUTH_SECRET=${AUTH_SECRET}
       - AUTH_URL=${AUTH_URL:-http://localhost}
       - NEXT_PUBLIC_GA_MEASUREMENT_ID=${NEXT_PUBLIC_GA_MEASUREMENT_ID}
       - ENABLE_ACTION_TRACKING=${ENABLE_ACTION_TRACKING:-true}
       # OAuth — pass both _DEV and _PROD; the app resolves based on ENVIRONMENT
-      - GITHUB_CLIENT_ID_DEV=${GITHUB_CLIENT_ID_DEV}
-      - GITHUB_CLIENT_SECRET_DEV=${GITHUB_CLIENT_SECRET_DEV}
-      - GITHUB_CLIENT_ID_PROD=${GITHUB_CLIENT_ID_PROD}
-      - GITHUB_CLIENT_SECRET_PROD=${GITHUB_CLIENT_SECRET_PROD}
-      - GOOGLE_CLIENT_ID_DEV=${GOOGLE_CLIENT_ID_DEV}
-      - GOOGLE_CLIENT_SECRET_DEV=${GOOGLE_CLIENT_SECRET_DEV}
-      - GOOGLE_CLIENT_ID_PROD=${GOOGLE_CLIENT_ID_PROD}
-      - GOOGLE_CLIENT_SECRET_PROD=${GOOGLE_CLIENT_SECRET_PROD}
+      - GITHUB_CLIENT_ID_DEV=${GITHUB_CLIENT_ID_DEV:-}
+      - GITHUB_CLIENT_SECRET_DEV=${GITHUB_CLIENT_SECRET_DEV:-}
+      - GITHUB_CLIENT_ID_PROD=${GITHUB_CLIENT_ID_PROD:-}
+      - GITHUB_CLIENT_SECRET_PROD=${GITHUB_CLIENT_SECRET_PROD:-}
+      - GOOGLE_CLIENT_ID_DEV=${GOOGLE_CLIENT_ID_DEV:-}
+      - GOOGLE_CLIENT_SECRET_DEV=${GOOGLE_CLIENT_SECRET_DEV:-}
+      - GOOGLE_CLIENT_ID_PROD=${GOOGLE_CLIENT_ID_PROD:-}
+      - GOOGLE_CLIENT_SECRET_PROD=${GOOGLE_CLIENT_SECRET_PROD:-}
       - RESEND_API_KEY=${RESEND_API_KEY}
       - EMAIL_FROM=${EMAIL_FROM}
       - ENCRYPTION_MASTER_KEY=${ENCRYPTION_MASTER_KEY}
@@ -32,6 +32,10 @@ services:
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
       - ADMIN_EMAILS=${ADMIN_EMAILS}
       - SYSTEM_LOG_FILE_PATH=${SYSTEM_LOG_FILE_PATH:-/app/logs/system.log}
+      - SERVER_METRICS_ENABLED=${SERVER_METRICS_ENABLED:-true}
+      - SERVER_METRICS_INTERVAL_SECONDS=${SERVER_METRICS_INTERVAL_SECONDS:-60}
+      - SERVER_METRICS_RETENTION_DAYS=${SERVER_METRICS_RETENTION_DAYS:-7}
+      - SERVER_METRICS_NODE_EXPORTER_URL=${SERVER_METRICS_NODE_EXPORTER_URL:-http://node-exporter:9100/metrics}
       - THUMBNAIL_S3_ENDPOINT=${THUMBNAIL_S3_ENDPOINT}
       - THUMBNAIL_S3_REGION=${THUMBNAIL_S3_REGION}
       - THUMBNAIL_S3_ACCESS_KEY=${THUMBNAIL_S3_ACCESS_KEY}
@@ -44,6 +48,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      node-exporter:
+        condition: service_started
     restart: unless-stopped
 
   tools:
@@ -53,10 +59,10 @@ services:
       target: tools
     environment:
       - ENVIRONMENT=${ENVIRONMENT:-DEV}
-      - DATABASE_URL=postgresql://s3admin:${POSTGRES_PASSWORD}@db:5432/s3_admin
+      - DATABASE_URL=${DATABASE_URL_DOCKER:-postgresql://s3admin:${POSTGRES_PASSWORD}@db:5432/s3_admin}
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
-      - STRIPE_SECRET_KEY_DEV=${STRIPE_SECRET_KEY_DEV}
-      - STRIPE_SECRET_KEY_PROD=${STRIPE_SECRET_KEY_PROD}
+      - STRIPE_SECRET_KEY_DEV=${STRIPE_SECRET_KEY_DEV:-}
+      - STRIPE_SECRET_KEY_PROD=${STRIPE_SECRET_KEY_PROD:-}
     depends_on:
       db:
         condition: service_healthy
@@ -76,6 +82,19 @@ services:
     depends_on:
       app:
         condition: service_started
+    restart: unless-stopped
+
+  node-exporter:
+    image: prom/node-exporter:v1.9.1
+    command:
+      - --path.rootfs=/host
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+|var/lib/kubelet/.+)($|/)
+    volumes:
+      - /:/host:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
     restart: unless-stopped
 
   db:

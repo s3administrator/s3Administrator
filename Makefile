@@ -96,8 +96,8 @@ dev-reset: ## Reset dev: destroy DB volume and restart
 	$(DC_DEV) up db -d
 	@echo "Waiting for PostgreSQL to be ready..."
 	@until $(DC_DEV) exec -T db pg_isready -U s3admin -d s3_admin -q 2>/dev/null; do sleep 1; done
-	npx prisma migrate dev
-	npx prisma db seed
+	$(DC_DEV) run --rm -T tools npx --no-install prisma migrate deploy
+	$(DC_DEV) run --rm -T tools npx --no-install prisma db seed
 	@echo "✓ Dev environment reset."
 
 dev-migrate: ## Run migrations & seed on development DB

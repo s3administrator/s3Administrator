@@ -173,6 +173,22 @@ model UserFileExtensionStat {
   @@index([userId])
 }
 
+model ServerMetricSample {
+  id                  String   @id @default(cuid())
+  recordedAt          DateTime @unique
+  hostCpuPercent      Float?
+  hostMemoryUsedBytes BigInt?
+  hostMemoryTotalBytes BigInt?
+  hostDiskUsedBytes   BigInt?
+  hostDiskTotalBytes  BigInt?
+  appCpuPercent       Float?
+  appMemoryUsedBytes  BigInt?
+  appMemoryLimitBytes BigInt?
+  createdAt           DateTime @default(now())
+
+  @@index([recordedAt])
+}
+
 model BackgroundTask {
   id          String   @id @default(cuid())
   userId      String

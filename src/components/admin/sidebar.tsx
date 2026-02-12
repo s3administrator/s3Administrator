@@ -15,6 +15,7 @@ import {
   CreditCard,
   Activity,
   ScrollText,
+  Server,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -25,6 +26,7 @@ const navItems = [
   { href: "/admin/subscriptions", label: "Subscriptions", icon: CreditCard },
   { href: "/admin/actions", label: "Actions", icon: Activity },
   { href: "/admin/logs", label: "System Logs", icon: ScrollText },
+  { href: "/admin/server", label: "Server Metrics", icon: Server },
 ]
 
 export function AdminSidebar() {
