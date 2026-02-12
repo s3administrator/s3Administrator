@@ -11,7 +11,10 @@ import {
 type SortField = "createdAt" | "source" | "level"
 type SortDirection = "asc" | "desc"
 
-const MAX_LOG_LINES = 6000
+const MAX_LOG_LINES = Math.max(
+  10000,
+  Number.parseInt(process.env.SYSTEM_LOG_MAX_LINES ?? "250000", 10) || 250000
+)
 
 function safeQueryString(searchParams: URLSearchParams, key: string, max = 255) {
   const value = (searchParams.get(key) ?? "").trim()
@@ -117,7 +120,7 @@ export async function GET(req: Request) {
   const requestedLimit = parseInt(searchParams.get("limit") ?? "50", 10)
   const limit = Number.isNaN(requestedLimit)
     ? 50
-    : Math.max(10, Math.min(100, requestedLimit))
+    : Math.max(10, Math.min(500, requestedLimit))
   const skip = (page - 1) * limit
 
   const source = safeQueryString(searchParams, "source", 16)
@@ -158,4 +161,3 @@ export async function GET(req: Request) {
     logFilePath: filePath,
   })
 }
-

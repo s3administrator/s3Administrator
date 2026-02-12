@@ -273,11 +273,11 @@ export default function AdminLogsPage() {
                     >
                       {log.route ?? "—"}
                     </TableCell>
-                    <TableCell className="max-w-96 truncate text-xs" title={log.message}>
+                    <TableCell className="max-w-[40rem] whitespace-pre-wrap break-all text-xs">
                       {log.message}
                     </TableCell>
                     <TableCell
-                      className="max-w-96 truncate font-mono text-xs text-muted-foreground"
+                      className="max-w-[40rem] whitespace-pre-wrap break-all font-mono text-xs text-muted-foreground"
                       title={log.metadata ? JSON.stringify(log.metadata) : ""}
                     >
                       {log.metadata ? JSON.stringify(log.metadata) : "—"}

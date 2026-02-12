@@ -17,6 +17,10 @@ export type SystemLogEntry = {
 const DEFAULT_LOG_PATH = path.join(process.cwd(), "logs", "system.log")
 const LOG_FILE_PATH =
   process.env.SYSTEM_LOG_FILE_PATH?.trim() || DEFAULT_LOG_PATH
+const MAX_LOG_MESSAGE_LENGTH = Math.max(
+  1000,
+  Number.parseInt(process.env.SYSTEM_LOG_MAX_MESSAGE_LENGTH ?? "50000", 10) || 50000
+)
 
 const globalForSystemLogger = globalThis as unknown as {
   __systemLoggerPatched?: boolean
@@ -37,7 +41,7 @@ function toMessageText(value: unknown): string {
 }
 
 function serializeConsoleArgs(args: unknown[]): string {
-  return args.map((arg) => toMessageText(arg)).join(" ").slice(0, 5000)
+  return args.map((arg) => toMessageText(arg)).join(" ")
 }
 
 function normalizeMetadata(
@@ -80,7 +84,7 @@ export async function logSystemEvent(input: {
     createdAt: new Date().toISOString(),
     source: input.source,
     level: input.level,
-    message: input.message.slice(0, 5000),
+    message: input.message.slice(0, MAX_LOG_MESSAGE_LENGTH),
     route: input.route ? input.route.slice(0, 256) : undefined,
     metadata: normalizeMetadata(input.metadata),
   }
@@ -139,6 +143,8 @@ export function setupServerErrorLogging() {
 
   const originalConsoleError = console.error.bind(console)
   const originalConsoleWarn = console.warn.bind(console)
+  const originalConsoleInfo = console.info.bind(console)
+  const originalConsoleLog = console.log.bind(console)
 
   console.error = (...args: unknown[]) => {
     void logSystemEvent({
@@ -158,6 +164,26 @@ export function setupServerErrorLogging() {
       metadata: { channel: "console.warn" },
     })
     originalConsoleWarn(...args)
+  }
+
+  console.info = (...args: unknown[]) => {
+    void logSystemEvent({
+      source: "app",
+      level: "info",
+      message: serializeConsoleArgs(args),
+      metadata: { channel: "console.info" },
+    })
+    originalConsoleInfo(...args)
+  }
+
+  console.log = (...args: unknown[]) => {
+    void logSystemEvent({
+      source: "app",
+      level: "info",
+      message: serializeConsoleArgs(args),
+      metadata: { channel: "console.log" },
+    })
+    originalConsoleLog(...args)
   }
 
   process.on("uncaughtException", (error) => {
@@ -184,4 +210,3 @@ export function setupServerErrorLogging() {
     })
   })
 }
-

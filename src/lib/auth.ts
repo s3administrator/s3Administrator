@@ -8,6 +8,7 @@ import { prisma } from "@/lib/db"
 import { Resend as ResendClient } from "resend"
 import { envVar } from "@/lib/env"
 import { signInEmail } from "@/lib/email"
+import { logSystemEvent } from "@/lib/system-logger"
 
 function getResendClient() {
   const apiKey = process.env.RESEND_API_KEY
@@ -21,7 +22,11 @@ const githubId = envVar("GITHUB_CLIENT_ID")
 const githubSecret = envVar("GITHUB_CLIENT_SECRET")
 if (githubId && githubSecret) {
   providers.push(
-    GitHub({ clientId: githubId, clientSecret: githubSecret })
+    GitHub({
+      clientId: githubId,
+      clientSecret: githubSecret,
+      allowDangerousEmailAccountLinking: true,
+    })
   )
 }
 
@@ -29,7 +34,11 @@ const googleId = envVar("GOOGLE_CLIENT_ID")
 const googleSecret = envVar("GOOGLE_CLIENT_SECRET")
 if (googleId && googleSecret) {
   providers.push(
-    Google({ clientId: googleId, clientSecret: googleSecret })
+    Google({
+      clientId: googleId,
+      clientSecret: googleSecret,
+      allowDangerousEmailAccountLinking: true,
+    })
   )
 }
 
@@ -72,6 +81,40 @@ const adminEmails = (process.env.ADMIN_EMAILS ?? "")
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma) as Adapter,
   providers,
+  logger: {
+    error(error) {
+      void logSystemEvent({
+        source: "app",
+        level: "error",
+        message: `next-auth:${error.name || "error"}:${error.message}`,
+        metadata: {
+          channel: "next-auth",
+          stack: error.stack ?? null,
+          cause:
+            error.cause === null || error.cause === undefined
+              ? null
+              : String(error.cause),
+        },
+      })
+    },
+    warn(code) {
+      void logSystemEvent({
+        source: "app",
+        level: "warn",
+        message: `next-auth:${code}`,
+        metadata: { channel: "next-auth" },
+      })
+    },
+    debug(code, metadata) {
+      if (process.env.NODE_ENV !== "development") return
+      void logSystemEvent({
+        source: "app",
+        level: "info",
+        message: `next-auth:${code}`,
+        metadata: metadata ? { channel: "next-auth", ...metadata } : { channel: "next-auth" },
+      })
+    },
+  },
   pages: {
     signIn: "/login",
     verifyRequest: "/verify",
