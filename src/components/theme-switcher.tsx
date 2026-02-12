@@ -1,7 +1,7 @@
 "use client"
 
 import { useTheme } from "next-themes"
-import { Sun, Moon, Eclipse, SunDim, Circle } from "lucide-react"
+import { Sun, Moon, Eclipse, Circle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -20,19 +20,17 @@ export function ThemeSwitcher() {
         <Button variant="ghost" size="sm" className="h-8 w-8 px-0">
           {activeTheme === "midnight" ? (
             <Eclipse className="h-4 w-4" />
-          ) : activeTheme === "dark" ? (
+          ) : activeTheme === "dark" || activeTheme === "graphite" ? (
             <Moon className="h-4 w-4" />
           ) : activeTheme === "matte" ? (
             <Circle className="h-4 w-4" />
-          ) : activeTheme === "soft" ? (
-            <SunDim className="h-4 w-4" />
           ) : (
             <Sun className="h-4 w-4" />
           )}
           <span className="sr-only">Toggle theme</span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent align="end" className="z-[120]">
         <DropdownMenuItem onClick={() => setTheme("light")}>
           <Sun className="mr-2 h-4 w-4" />
           Light
@@ -41,9 +39,9 @@ export function ThemeSwitcher() {
           <Circle className="mr-2 h-4 w-4" />
           Matte Light
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setTheme("soft")}>
-          <SunDim className="mr-2 h-4 w-4" />
-          Soft Light
+        <DropdownMenuItem onClick={() => setTheme("graphite")}>
+          <Moon className="mr-2 h-4 w-4" />
+          Graphite
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => setTheme("midnight")}>
           <Eclipse className="mr-2 h-4 w-4" />

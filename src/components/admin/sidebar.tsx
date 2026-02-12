@@ -7,7 +7,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import {
-  Shield,
+  Database,
   Users,
   BarChart3,
   LogOut,
@@ -49,8 +49,8 @@ export function AdminSidebar({
   return (
     <div
       className={cn(
-        "flex h-full shrink-0 flex-col border-r bg-muted/30 transition-[width] duration-200",
-        sidebarCollapsed ? "w-20" : "w-56",
+        "flex h-full min-h-0 shrink-0 flex-col border-r bg-muted/30 transition-[width] duration-200",
+        sidebarCollapsed ? "w-20 lg:w-20" : "w-80 lg:w-96",
         className
       )}
     >
@@ -68,8 +68,8 @@ export function AdminSidebar({
           )}
           onClick={onNavigate}
         >
-          <Shield className="h-5 w-5" />
-          {!sidebarCollapsed && <span>Admin</span>}
+          <Database className="h-5 w-5" />
+          {!sidebarCollapsed && <span>S3 Admin</span>}
         </Link>
         {sidebarCollapsed ? (
           collapsible && (
@@ -103,7 +103,12 @@ export function AdminSidebar({
         )}
       </div>
 
-      <div className={cn("flex-1 space-y-1 overflow-y-auto", sidebarCollapsed ? "p-2" : "p-3")}>
+      <div
+        className={cn(
+          "min-h-0 flex-1 space-y-1 overflow-y-auto [-webkit-overflow-scrolling:touch]",
+          sidebarCollapsed ? "p-2" : "p-3"
+        )}
+      >
         {navItems.map(({ href, label, icon: Icon }) => (
           <Link
             key={href}

@@ -62,9 +62,9 @@ export default function AdminLayout({
               showCloseButton={false}
               className="z-[90] w-[84vw] max-w-[320px] border-r p-0"
             >
-              <SheetTitle className="sr-only">Admin navigation</SheetTitle>
+              <SheetTitle className="sr-only">Navigation</SheetTitle>
               <SheetDescription className="sr-only">
-                Navigate through admin pages.
+                Sidebar navigation and background task shortcuts.
               </SheetDescription>
               <AdminSidebar
                 className="w-full border-r-0"
@@ -73,7 +73,7 @@ export default function AdminLayout({
               />
             </SheetContent>
           </Sheet>
-          <p className="ml-2 text-sm font-semibold">Admin Panel</p>
+          <p className="ml-2 text-sm font-semibold">S3 Admin</p>
         </header>
         <main className="flex-1 overflow-y-auto overflow-x-hidden [-webkit-overflow-scrolling:touch]">
           {children}

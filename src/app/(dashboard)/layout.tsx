@@ -64,7 +64,7 @@ export default function DashboardLayout({
               <SheetDescription className="sr-only">
                 Sidebar navigation and background task shortcuts.
               </SheetDescription>
-              <Sidebar className="w-full border-r-0 lg:w-full" />
+              <Sidebar className="w-full border-r-0 lg:w-full" collapsible={false} />
             </SheetContent>
           </Sheet>
           <p className="ml-2 text-sm font-semibold">S3 Admin</p>

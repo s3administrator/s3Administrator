@@ -277,296 +277,434 @@ export function Sidebar({
     <TooltipProvider>
       <div
         className={cn(
-          "flex h-full w-80 min-w-0 flex-col border-r bg-muted/30 lg:w-96",
+          "flex h-full min-w-0 flex-col border-r bg-muted/30 transition-[width] duration-200",
+          sidebarCollapsed ? "w-20 lg:w-20" : "w-80 lg:w-96",
           className
         )}
       >
-        <div className="flex h-14 items-center justify-between border-b px-4">
-          <Link href="/dashboard" className="flex items-center gap-2 font-semibold">
-            <Database className="h-5 w-5" />
-            <span>S3 Admin</span>
-          </Link>
-          <ThemeSwitcher />
-        </div>
-
-        <ScrollArea className="flex-1 px-2.5 py-2.5 sm:px-3 sm:py-3">
-          <div className="mb-4 space-y-2">
-            <div className="flex items-center justify-between px-2">
-              <p className="text-xs font-medium text-muted-foreground">Buckets</p>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 gap-1 px-2 text-xs"
-                onClick={handleSyncAll}
-                disabled={bucketsLoading || !buckets?.length || isSyncingAll}
-              >
-                <RefreshCw className={cn("h-3.5 w-3.5", isSyncingAll && "animate-spin")} />
-                Sync all
-              </Button>
-            </div>
-
-            {/* Search input with Sort and Filter icons */}
-            <div className="flex items-center gap-1 px-2">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search buckets..."
-                  value={bucketSearch}
-                  onChange={(e) => setBucketSearch(e.target.value)}
-                  className="h-7 pl-9 text-xs"
-                />
-              </div>
-
-              {/* Sort icon */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 w-7 p-0"
-                  >
-                    <ArrowUpDown className="h-3.5 w-3.5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-36">
-                  <DropdownMenuLabel className="text-xs">Sort by</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => { setBucketSortField("name"); setBucketSortDir("asc") }}>
-                    Name ↑ {bucketSortField === "name" && bucketSortDir === "asc" && "✓"}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => { setBucketSortField("name"); setBucketSortDir("desc") }}>
-                    Name ↓ {bucketSortField === "name" && bucketSortDir === "desc" && "✓"}
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => { setBucketSortField("size"); setBucketSortDir("asc") }}>
-                    Size ↑ {bucketSortField === "size" && bucketSortDir === "asc" && "✓"}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => { setBucketSortField("size"); setBucketSortDir("desc") }}>
-                    Size ↓ {bucketSortField === "size" && bucketSortDir === "desc" && "✓"}
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => { setBucketSortField("fileCount"); setBucketSortDir("asc") }}>
-                    Files ↑ {bucketSortField === "fileCount" && bucketSortDir === "asc" && "✓"}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => { setBucketSortField("fileCount"); setBucketSortDir("desc") }}>
-                    Files ↓ {bucketSortField === "fileCount" && bucketSortDir === "desc" && "✓"}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              {/* Filter icon */}
-              <DropdownMenu modal={false}>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 w-7 p-0"
-                  >
-                    <Filter className="h-3.5 w-3.5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-48" onCloseAutoFocus={(e) => e.preventDefault()}>
-                  <DropdownMenuLabel className="text-xs">Credentials</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuCheckboxItem
-                    checked={selectedCredentials.length === 0}
-                    onCheckedChange={() => setSelectedCredentials([])}
-                    onSelect={(e) => e.preventDefault()}
-                  >
-                    All Credentials
-                  </DropdownMenuCheckboxItem>
-                  {credentials.length > 0 && <DropdownMenuSeparator />}
-                  {credentials.map((cred) => (
-                    <DropdownMenuCheckboxItem
-                      key={cred.id}
-                      checked={selectedCredentials.includes(cred.id)}
-                      onCheckedChange={() => toggleCredential(cred.id)}
-                      onSelect={(e) => e.preventDefault()}
-                    >
-                      {cred.label}
-                    </DropdownMenuCheckboxItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </div>
-
-          {/* Bucket list */}
-          {bucketsLoading ? (
-            <div className="space-y-2">
-              <Skeleton className="h-8 w-full" />
-              <Skeleton className="h-8 w-full" />
-              <Skeleton className="h-8 w-full" />
-            </div>
-          ) : filteredAndSortedBuckets.length > 0 ? (
-            <div className="space-y-1">
-              {filteredAndSortedBuckets.map((bucket) => {
-                const href = `/dashboard?bucket=${encodeURIComponent(bucket.name)}&credentialId=${encodeURIComponent(bucket.credentialId)}`
-                const isActive =
-                  pathname === "/dashboard" &&
-                  searchParams.get("bucket") === bucket.name &&
-                  searchParams.get("credentialId") === bucket.credentialId
-                const bucketStat = statsByBucket.get(`${bucket.credentialId}:${bucket.name}`)
-                const totalSize = bucketStat?.totalSize ?? 0
-                const fileCount = bucketStat?.fileCount ?? 0
-                return (
-                  <Tooltip key={`${bucket.credentialId}:${bucket.name}`}>
-                    <TooltipTrigger asChild>
-                      <Link
-                        href={href}
-                        className={cn(
-                          "flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-accent",
-                          isActive && "bg-accent"
-                        )}
-                      >
-                        <HardDrive className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm leading-tight break-words">{bucket.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {formatSize(totalSize)} · {fileCount}{" "}
-                            {fileCount === 1 ? "file" : "files"}
-                          </p>
-                        </div>
-                      </Link>
-                    </TooltipTrigger>
-                    <TooltipContent>{bucket.name}</TooltipContent>
-                  </Tooltip>
-                )
-              })}
-            </div>
-          ) : (
-            <p className="px-2 text-sm text-muted-foreground">
-              {bucketSearch || selectedCredentials.length > 0
-                ? "No buckets match your filters."
-                : "No buckets found. Add your S3 credentials in Settings."}
-            </p>
+        <div
+          className={cn(
+            "flex h-14 items-center border-b",
+            sidebarCollapsed ? "justify-between px-2" : "justify-between px-4"
           )}
-        </ScrollArea>
-
-        <Separator />
-        <div className="space-y-0.5 p-2 pb-16 sm:space-y-1 sm:p-3">
+        >
           <Link
             href="/dashboard"
             className={cn(
-              "flex items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-accent sm:py-1.5 sm:text-sm",
-              isOverviewActive && "bg-accent"
+              "flex items-center font-semibold",
+              sidebarCollapsed ? "justify-center px-1" : "gap-2"
             )}
           >
-            <LayoutDashboard className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            Overview
+            <Database className="h-5 w-5" />
+            {!sidebarCollapsed && <span>S3 Admin</span>}
           </Link>
-
-          <Link
-            href="/dashboard/search"
-            className={cn(
-              "flex items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-accent sm:py-1.5 sm:text-sm",
-              pathname === "/dashboard/search" && "bg-accent"
-            )}
-          >
-            <FileSearch className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            Search All Files
-          </Link>
-
-          <Link
-            href="/audit-logs"
-            className={cn(
-              "flex items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-accent sm:py-1.5 sm:text-sm",
-              pathname === "/audit-logs" && "bg-accent"
-            )}
-          >
-            <Activity className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            Audit Logs
-          </Link>
-
-          <Link
-            href="/dashboard/tasks"
-            className={cn(
-              "flex items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-accent sm:py-1.5 sm:text-sm",
-              isTasksActive && "bg-accent"
-            )}
-          >
-            <ListTodo className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            Tasks
-          </Link>
-
-          <div className="rounded-md border p-1 sm:p-2">
-            <div className="mb-1 flex items-center justify-between sm:mb-2">
-              <p className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground sm:text-xs">
-                <ListTodo className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                Tasks
-              </p>
+          {sidebarCollapsed ? (
+            collapsible && (
               <Button
-                type="button"
                 variant="ghost"
-                size="sm"
-                className="h-5 px-1.5 text-[10px] leading-none sm:h-6 sm:px-2 sm:text-xs"
-                onClick={() => {
-                  void processTaskQueue()
-                  queryClient.invalidateQueries({ queryKey: ["background-tasks"] })
-                }}
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setIsCollapsed(false)}
+                title="Expand sidebar"
+                aria-label="Expand sidebar"
               >
-                Poll
+                <ChevronsRight className="h-4 w-4" />
               </Button>
+            )
+          ) : (
+            <div className="flex items-center gap-1">
+              <ThemeSwitcher />
+              {collapsible && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setIsCollapsed(true)}
+                  title="Collapse sidebar"
+                  aria-label="Collapse sidebar"
+                >
+                  <ChevronsLeft className="h-4 w-4" />
+                </Button>
+              )}
             </div>
-            {tasks.length === 0 ? (
-              <p className="px-1 text-[10px] text-muted-foreground sm:text-xs">No ongoing tasks</p>
-            ) : (
-              <div className="space-y-1.5">
-                {tasks.map((task) => (
-                  <Link
-                    key={task.id}
-                    href="/dashboard/tasks"
-                    className="block rounded-sm bg-muted/40 px-1.5 py-1 text-[10px] font-medium leading-4 hover:bg-muted/60 sm:px-2 sm:py-1.5 sm:text-xs"
-                    title={task.title}
-                  >
-                    <span className="line-clamp-2">{task.title}</span>
-                  </Link>
-                ))}
-              </div>
-            )}
+          )}
+        </div>
+
+        {sidebarCollapsed ? (
+          <div className="flex-1 overflow-y-auto p-2">
+            <div className="space-y-1">
+              <Link
+                href="/dashboard"
+                title="Overview"
+                className={cn(
+                  "flex justify-center rounded-md px-2 py-2 hover:bg-accent",
+                  isOverviewActive && "bg-accent"
+                )}
+              >
+                <LayoutDashboard className="h-4 w-4" />
+              </Link>
+              <Link
+                href="/dashboard/search"
+                title="Search All Files"
+                className={cn(
+                  "flex justify-center rounded-md px-2 py-2 hover:bg-accent",
+                  pathname === "/dashboard/search" && "bg-accent"
+                )}
+              >
+                <FileSearch className="h-4 w-4" />
+              </Link>
+              <Link
+                href="/audit-logs"
+                title="Audit Logs"
+                className={cn(
+                  "flex justify-center rounded-md px-2 py-2 hover:bg-accent",
+                  pathname === "/audit-logs" && "bg-accent"
+                )}
+              >
+                <Activity className="h-4 w-4" />
+              </Link>
+              <Link
+                href="/dashboard/tasks"
+                title="Tasks"
+                className={cn(
+                  "flex justify-center rounded-md px-2 py-2 hover:bg-accent",
+                  isTasksActive && "bg-accent"
+                )}
+              >
+                <ListTodo className="h-4 w-4" />
+              </Link>
+              {isAdmin && (
+                <Link
+                  href="/admin"
+                  title="Admin"
+                  className={cn(
+                    "flex justify-center rounded-md px-2 py-2 hover:bg-accent",
+                    pathname === "/admin" && "bg-accent"
+                  )}
+                >
+                  <Shield className="h-4 w-4" />
+                </Link>
+              )}
+              <Link
+                href="/settings"
+                title="Settings"
+                className={cn(
+                  "flex justify-center rounded-md px-2 py-2 hover:bg-accent",
+                  pathname === "/settings" && "bg-accent"
+                )}
+              >
+                <Settings className="h-4 w-4" />
+              </Link>
+              <Link
+                href="/billing"
+                title="Billing"
+                className={cn(
+                  "flex justify-center rounded-md px-2 py-2 hover:bg-accent",
+                  pathname === "/billing" && "bg-accent"
+                )}
+              >
+                <CreditCard className="h-4 w-4" />
+              </Link>
+            </div>
           </div>
-          {isAdmin && (
+        ) : (
+          <ScrollArea className="flex-1 px-2.5 py-2.5 sm:px-3 sm:py-3">
+            <div className="mb-4 space-y-2">
+              <div className="flex items-center justify-between px-2">
+                <p className="text-xs font-medium text-muted-foreground">Buckets</p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 gap-1 px-2 text-xs"
+                  onClick={handleSyncAll}
+                  disabled={bucketsLoading || !buckets?.length || isSyncingAll}
+                >
+                  <RefreshCw className={cn("h-3.5 w-3.5", isSyncingAll && "animate-spin")} />
+                  Sync all
+                </Button>
+              </div>
+
+              {/* Search input with Sort and Filter icons */}
+              <div className="flex items-center gap-1 px-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Search buckets..."
+                    value={bucketSearch}
+                    onChange={(e) => setBucketSearch(e.target.value)}
+                    className="h-7 pl-9 text-xs"
+                  />
+                </div>
+
+                {/* Sort icon */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0"
+                    >
+                      <ArrowUpDown className="h-3.5 w-3.5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-36">
+                    <DropdownMenuLabel className="text-xs">Sort by</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => { setBucketSortField("name"); setBucketSortDir("asc") }}>
+                      Name ↑ {bucketSortField === "name" && bucketSortDir === "asc" && "✓"}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => { setBucketSortField("name"); setBucketSortDir("desc") }}>
+                      Name ↓ {bucketSortField === "name" && bucketSortDir === "desc" && "✓"}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => { setBucketSortField("size"); setBucketSortDir("asc") }}>
+                      Size ↑ {bucketSortField === "size" && bucketSortDir === "asc" && "✓"}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => { setBucketSortField("size"); setBucketSortDir("desc") }}>
+                      Size ↓ {bucketSortField === "size" && bucketSortDir === "desc" && "✓"}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => { setBucketSortField("fileCount"); setBucketSortDir("asc") }}>
+                      Files ↑ {bucketSortField === "fileCount" && bucketSortDir === "asc" && "✓"}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => { setBucketSortField("fileCount"); setBucketSortDir("desc") }}>
+                      Files ↓ {bucketSortField === "fileCount" && bucketSortDir === "desc" && "✓"}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                {/* Filter icon */}
+                <DropdownMenu modal={false}>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0"
+                    >
+                      <Filter className="h-3.5 w-3.5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-48" onCloseAutoFocus={(e) => e.preventDefault()}>
+                    <DropdownMenuLabel className="text-xs">Credentials</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuCheckboxItem
+                      checked={selectedCredentials.length === 0}
+                      onCheckedChange={() => setSelectedCredentials([])}
+                      onSelect={(e) => e.preventDefault()}
+                    >
+                      All Credentials
+                    </DropdownMenuCheckboxItem>
+                    {credentials.length > 0 && <DropdownMenuSeparator />}
+                    {credentials.map((cred) => (
+                      <DropdownMenuCheckboxItem
+                        key={cred.id}
+                        checked={selectedCredentials.includes(cred.id)}
+                        onCheckedChange={() => toggleCredential(cred.id)}
+                        onSelect={(e) => e.preventDefault()}
+                      >
+                        {cred.label}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
+
+            {/* Bucket list */}
+            {bucketsLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-8 w-full" />
+                <Skeleton className="h-8 w-full" />
+                <Skeleton className="h-8 w-full" />
+              </div>
+            ) : filteredAndSortedBuckets.length > 0 ? (
+              <div className="space-y-1">
+                {filteredAndSortedBuckets.map((bucket) => {
+                  const href = `/dashboard?bucket=${encodeURIComponent(bucket.name)}&credentialId=${encodeURIComponent(bucket.credentialId)}`
+                  const isActive =
+                    pathname === "/dashboard" &&
+                    searchParams.get("bucket") === bucket.name &&
+                    searchParams.get("credentialId") === bucket.credentialId
+                  const bucketStat = statsByBucket.get(`${bucket.credentialId}:${bucket.name}`)
+                  const totalSize = bucketStat?.totalSize ?? 0
+                  const fileCount = bucketStat?.fileCount ?? 0
+                  return (
+                    <Tooltip key={`${bucket.credentialId}:${bucket.name}`}>
+                      <TooltipTrigger asChild>
+                        <Link
+                          href={href}
+                          className={cn(
+                            "flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-accent",
+                            isActive && "bg-accent"
+                          )}
+                        >
+                          <HardDrive className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm leading-tight break-words">{bucket.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatSize(totalSize)} · {fileCount}{" "}
+                              {fileCount === 1 ? "file" : "files"}
+                            </p>
+                          </div>
+                        </Link>
+                      </TooltipTrigger>
+                      <TooltipContent>{bucket.name}</TooltipContent>
+                    </Tooltip>
+                  )
+                })}
+              </div>
+            ) : (
+              <p className="px-2 text-sm text-muted-foreground">
+                {bucketSearch || selectedCredentials.length > 0
+                  ? "No buckets match your filters."
+                  : "No buckets found. Add your S3 credentials in Settings."}
+              </p>
+            )}
+          </ScrollArea>
+        )}
+
+        <Separator />
+        {sidebarCollapsed ? (
+          <div className="space-y-1 p-2">
+            <div className="flex justify-center pb-1">
+              <ThemeSwitcher />
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              title="Sign Out"
+              className="h-8 w-full justify-center px-2"
+              onClick={() => signOut({ callbackUrl: "/" })}
+            >
+              <LogOut className="h-4 w-4" />
+              <span className="sr-only">Sign Out</span>
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-0.5 p-2 pb-16 sm:space-y-1 sm:p-3">
             <Link
-              href="/admin"
+              href="/dashboard"
               className={cn(
                 "flex items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-accent sm:py-1.5 sm:text-sm",
-                pathname === "/admin" && "bg-accent"
+                isOverviewActive && "bg-accent"
               )}
             >
-              <Shield className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              Admin
+              <LayoutDashboard className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              Overview
             </Link>
-          )}
-          <Link
-            href="/settings"
-            className={cn(
-              "flex items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-accent sm:py-1.5 sm:text-sm",
-              pathname === "/settings" && "bg-accent"
+
+            <Link
+              href="/dashboard/search"
+              className={cn(
+                "flex items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-accent sm:py-1.5 sm:text-sm",
+                pathname === "/dashboard/search" && "bg-accent"
+              )}
+            >
+              <FileSearch className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              Search All Files
+            </Link>
+
+            <Link
+              href="/audit-logs"
+              className={cn(
+                "flex items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-accent sm:py-1.5 sm:text-sm",
+                pathname === "/audit-logs" && "bg-accent"
+              )}
+            >
+              <Activity className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              Audit Logs
+            </Link>
+
+            <Link
+              href="/dashboard/tasks"
+              className={cn(
+                "flex items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-accent sm:py-1.5 sm:text-sm",
+                isTasksActive && "bg-accent"
+              )}
+            >
+              <ListTodo className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              Tasks
+            </Link>
+
+            <div className="rounded-md border p-1 sm:p-2">
+              <div className="mb-1 flex items-center justify-between sm:mb-2">
+                <p className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground sm:text-xs">
+                  <ListTodo className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                  Tasks
+                </p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-5 px-1.5 text-[10px] leading-none sm:h-6 sm:px-2 sm:text-xs"
+                  onClick={() => {
+                    void processTaskQueue()
+                    queryClient.invalidateQueries({ queryKey: ["background-tasks"] })
+                  }}
+                >
+                  Poll
+                </Button>
+              </div>
+              {tasks.length === 0 ? (
+                <p className="px-1 text-[10px] text-muted-foreground sm:text-xs">No ongoing tasks</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {tasks.map((task) => (
+                    <Link
+                      key={task.id}
+                      href="/dashboard/tasks"
+                      className="block rounded-sm bg-muted/40 px-1.5 py-1 text-[10px] font-medium leading-4 hover:bg-muted/60 sm:px-2 sm:py-1.5 sm:text-xs"
+                      title={task.title}
+                    >
+                      <span className="line-clamp-2">{task.title}</span>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+            {isAdmin && (
+              <Link
+                href="/admin"
+                className={cn(
+                  "flex items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-accent sm:py-1.5 sm:text-sm",
+                  pathname === "/admin" && "bg-accent"
+                )}
+              >
+                <Shield className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                Admin
+              </Link>
             )}
-          >
-            <Settings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            Settings
-          </Link>
-          <Link
-            href="/billing"
-            className={cn(
-              "flex items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-accent sm:py-1.5 sm:text-sm",
-              pathname === "/billing" && "bg-accent"
-            )}
-          >
-            <CreditCard className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            Billing
-          </Link>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 w-full justify-start gap-2 px-2 text-xs sm:h-9 sm:text-sm"
-            onClick={() => signOut({ callbackUrl: "/" })}
-          >
-            <LogOut className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            Sign Out
-          </Button>
-        </div>
+            <Link
+              href="/settings"
+              className={cn(
+                "flex items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-accent sm:py-1.5 sm:text-sm",
+                pathname === "/settings" && "bg-accent"
+              )}
+            >
+              <Settings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              Settings
+            </Link>
+            <Link
+              href="/billing"
+              className={cn(
+                "flex items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-accent sm:py-1.5 sm:text-sm",
+                pathname === "/billing" && "bg-accent"
+              )}
+            >
+              <CreditCard className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              Billing
+            </Link>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-full justify-start gap-2 px-2 text-xs sm:h-9 sm:text-sm"
+              onClick={() => signOut({ callbackUrl: "/" })}
+            >
+              <LogOut className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              Sign Out
+            </Button>
+          </div>
+        )}
       </div>
     </TooltipProvider>
   )
