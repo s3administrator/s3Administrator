@@ -1,4 +1,5 @@
 import { promises as fs } from "fs"
+import os from "os"
 import { prisma } from "@/lib/db"
 import { logSystemEvent } from "@/lib/system-logger"
 
@@ -286,7 +287,8 @@ async function readAppMemory() {
     "/sys/fs/cgroup/memory/memory.limit_in_bytes",
   ])
 
-  const used = parseBigIntValue(usedRaw)
+  const hasCgroupData = usedRaw !== null || limitRaw !== null
+  let used = parseBigIntValue(usedRaw)
   let limit: bigint | null = null
   if (limitRaw === "max") {
     limit = null
@@ -296,6 +298,18 @@ async function readAppMemory() {
 
   if (limit !== null && limit > BigInt("1000000000000000")) {
     limit = null
+  }
+
+  if (!hasCgroupData) {
+    const rss = process.memoryUsage().rss
+    if (Number.isFinite(rss) && rss > 0) {
+      used = BigInt(Math.round(rss))
+    }
+
+    const total = os.totalmem()
+    if (Number.isFinite(total) && total > 0) {
+      limit = BigInt(Math.round(total))
+    }
   }
 
   return {

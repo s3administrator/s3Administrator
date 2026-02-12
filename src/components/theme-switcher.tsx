@@ -1,7 +1,7 @@
 "use client"
 
 import { useTheme } from "next-themes"
-import { Sun, Moon, Eclipse } from "lucide-react"
+import { Sun, Moon, Eclipse, SunDim } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -26,6 +26,8 @@ export function ThemeSwitcher() {
               <Eclipse className="h-4 w-4" />
             ) : resolvedTheme === "dark" ? (
               <Moon className="h-4 w-4" />
+            ) : resolvedTheme === "soft" ? (
+              <SunDim className="h-4 w-4" />
             ) : (
               <Sun className="h-4 w-4" />
             )
@@ -39,6 +41,10 @@ export function ThemeSwitcher() {
         <DropdownMenuItem onClick={() => setTheme("light")}>
           <Sun className="mr-2 h-4 w-4" />
           Light
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setTheme("soft")}>
+          <SunDim className="mr-2 h-4 w-4" />
+          Soft Light
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => setTheme("midnight")}>
           <Eclipse className="mr-2 h-4 w-4" />

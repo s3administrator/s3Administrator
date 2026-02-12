@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/db"
 import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
 
-type RangeKey = "24h" | "7d"
+type RangeKey = "1h" | "1d" | "7d"
 type ResolutionKey = "1m" | "5m" | "15m" | "1h"
 
 type ServerMetricPoint = {
@@ -19,7 +19,8 @@ type ServerMetricPoint = {
 }
 
 const RANGE_TO_MS: Record<RangeKey, number> = {
-  "24h": 24 * 60 * 60 * 1000,
+  "1h": 60 * 60 * 1000,
+  "1d": 24 * 60 * 60 * 1000,
   "7d": 7 * 24 * 60 * 60 * 1000,
 }
 
@@ -37,7 +38,8 @@ function safeQueryString(searchParams: URLSearchParams, key: string, max = 16) {
 }
 
 function parseRange(raw: string): RangeKey {
-  if (raw === "24h") return "24h"
+  if (raw === "1h") return "1h"
+  if (raw === "1d" || raw === "24h") return "1d"
   return "7d"
 }
 
