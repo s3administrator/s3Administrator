@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   Dialog,
   DialogContent,
@@ -10,8 +10,22 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Loader2 } from "lucide-react"
 import { toast } from "sonner"
+import {
+  DESTRUCTIVE_CONFIRM_PHRASE,
+  DESTRUCTIVE_CONFIRM_SCOPE,
+  hasDestructiveConfirmBypass,
+  setDestructiveConfirmBypass,
+  type DestructiveConfirmRememberOption,
+} from "@/lib/destructive-confirmation"
 
 interface RenameDialogProps {
   open: boolean
@@ -39,10 +53,31 @@ export function RenameDialog({
 
   const [name, setName] = useState(currentName)
   const [isRenaming, setIsRenaming] = useState(false)
+  const [confirmValue, setConfirmValue] = useState("")
+  const [rememberOption, setRememberOption] =
+    useState<DestructiveConfirmRememberOption>("ask")
+  const [bypassActive, setBypassActive] = useState(false)
+
+  useEffect(() => {
+    if (!open) {
+      setConfirmValue("")
+      return
+    }
+
+    const activeBypass = hasDestructiveConfirmBypass(DESTRUCTIVE_CONFIRM_SCOPE)
+    setBypassActive(activeBypass)
+    setRememberOption(activeBypass ? "one_hour" : "ask")
+  }, [open])
 
   async function handleRename(e: React.FormEvent) {
     e.preventDefault()
     if (!name || name === currentName) return
+
+    const activeBypass = hasDestructiveConfirmBypass(DESTRUCTIVE_CONFIRM_SCOPE)
+    if (!activeBypass && confirmValue.trim() !== DESTRUCTIVE_CONFIRM_PHRASE) {
+      toast.error(`Type "${DESTRUCTIVE_CONFIRM_PHRASE}" to confirm rename`)
+      return
+    }
 
     setIsRenaming(true)
     try {
@@ -59,6 +94,7 @@ export function RenameDialog({
 
       if (!res.ok) throw new Error("Rename failed")
 
+      setDestructiveConfirmBypass(DESTRUCTIVE_CONFIRM_SCOPE, rememberOption)
       toast.success("Renamed successfully")
       await onRenameComplete()
       onOpenChange(false)
@@ -85,6 +121,45 @@ export function RenameDialog({
               required
             />
           </div>
+          <div className="space-y-3 rounded-md border border-destructive/40 bg-destructive/5 p-3">
+            {!bypassActive ? (
+              <div className="space-y-1">
+                <Label htmlFor="rename-confirm-input">Confirmation</Label>
+                <p className="text-xs text-muted-foreground">
+                  Renaming moves the object and deletes the original key. Type{" "}
+                  <span className="font-mono">{DESTRUCTIVE_CONFIRM_PHRASE}</span> to continue.
+                </p>
+                <Input
+                  id="rename-confirm-input"
+                  value={confirmValue}
+                  onChange={(event) => setConfirmValue(event.target.value)}
+                  placeholder={DESTRUCTIVE_CONFIRM_PHRASE}
+                  autoComplete="off"
+                />
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Confirmation bypass is currently active on this browser.
+              </p>
+            )}
+            <div className="space-y-1">
+              <Label htmlFor="rename-confirm-remember">Prompt behavior</Label>
+              <Select
+                value={rememberOption}
+                onValueChange={(value) =>
+                  setRememberOption(value as DestructiveConfirmRememberOption)
+                }
+              >
+                <SelectTrigger id="rename-confirm-remember" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ask">Ask every time</SelectItem>
+                  <SelectItem value="one_hour">Don&apos;t ask again for 1 hour</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
           <div className="flex justify-end gap-2">
             <Button
               type="button"
@@ -93,7 +168,14 @@ export function RenameDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isRenaming || !name}>
+            <Button
+              type="submit"
+              disabled={
+                isRenaming ||
+                !name ||
+                (!bypassActive && confirmValue.trim() !== DESTRUCTIVE_CONFIRM_PHRASE)
+              }
+            >
               {isRenaming ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}

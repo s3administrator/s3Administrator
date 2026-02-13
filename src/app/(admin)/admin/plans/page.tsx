@@ -23,8 +23,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { DestructiveConfirmDialog } from "@/components/shared/destructive-confirm-dialog"
 import { toast } from "sonner"
 import { Plus, Pencil, Trash2, Power, PowerOff } from "lucide-react"
+import {
+  DESTRUCTIVE_CONFIRM_SCOPE,
+  hasDestructiveConfirmBypass,
+} from "@/lib/destructive-confirmation"
 
 interface Plan {
   id: string
@@ -37,6 +42,13 @@ interface Plan {
   features: string[]
   thumbnailCache: boolean
   transferTasks: boolean
+  recursiveDelete: boolean
+  multipleUpload: boolean
+  copyFolderToFolder: boolean
+  copyBucketToBucket: boolean
+  auditLogs: boolean
+  searchAllFiles: boolean
+  syncTasks: boolean
   isActive: boolean
   sortOrder: number
   _count: { subscriptions: number }
@@ -59,6 +71,13 @@ function PlanForm({
   const [features, setFeatures] = useState(plan?.features?.join("\n") ?? "")
   const [thumbnailCache, setThumbnailCache] = useState(plan?.thumbnailCache ?? false)
   const [transferTasks, setTransferTasks] = useState(plan?.transferTasks ?? false)
+  const [recursiveDelete, setRecursiveDelete] = useState(plan?.recursiveDelete ?? false)
+  const [multipleUpload, setMultipleUpload] = useState(plan?.multipleUpload ?? false)
+  const [copyFolderToFolder, setCopyFolderToFolder] = useState(plan?.copyFolderToFolder ?? false)
+  const [copyBucketToBucket, setCopyBucketToBucket] = useState(plan?.copyBucketToBucket ?? false)
+  const [auditLogs, setAuditLogs] = useState(plan?.auditLogs ?? false)
+  const [searchAllFiles, setSearchAllFiles] = useState(plan?.searchAllFiles ?? false)
+  const [syncTasks, setSyncTasks] = useState(plan?.syncTasks ?? false)
   const [sortOrder, setSortOrder] = useState(plan?.sortOrder?.toString() ?? "0")
   const [saving, setSaving] = useState(false)
 
@@ -75,6 +94,13 @@ function PlanForm({
         features: features.split("\n").map((f) => f.trim()).filter(Boolean),
         thumbnailCache,
         transferTasks,
+        recursiveDelete,
+        multipleUpload,
+        copyFolderToFolder,
+        copyBucketToBucket,
+        auditLogs,
+        searchAllFiles,
+        syncTasks,
         sortOrder: parseInt(sortOrder, 10),
       }
 
@@ -144,11 +170,12 @@ function PlanForm({
           <Input
             id="bucketLimit"
             type="number"
-            min="0"
+            min="1"
+            max="1000"
             value={bucketLimit}
             onChange={(e) => setBucketLimit(e.target.value)}
           />
-          <p className="text-xs text-muted-foreground">0 = unlimited</p>
+          <p className="text-xs text-muted-foreground">Max 1,000</p>
         </div>
         <div className="space-y-2">
           <Label htmlFor="fileLimit">File Limit</Label>
@@ -182,21 +209,83 @@ function PlanForm({
             value={sortOrder}
             onChange={(e) => setSortOrder(e.target.value)}
           />
-          <label className="mt-4 flex items-center gap-2 text-sm">
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Action Settings</Label>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <label className="flex items-center gap-2 text-sm">
             <Checkbox
               checked={thumbnailCache}
               onCheckedChange={(checked) => setThumbnailCache(checked === true)}
               aria-label="Enable thumbnail cache"
             />
-            Enable thumbnail cache
+            Preview thumbnails
           </label>
-          <label className="mt-2 flex items-center gap-2 text-sm">
+          <label className="flex items-center gap-2 text-sm">
             <Checkbox
               checked={transferTasks}
               onCheckedChange={(checked) => setTransferTasks(checked === true)}
               aria-label="Enable transfer tasks"
             />
-            Enable transfer tasks
+            Transfer tasks (master)
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox
+              checked={recursiveDelete}
+              onCheckedChange={(checked) => setRecursiveDelete(checked === true)}
+              aria-label="Enable recursive delete"
+            />
+            Recursive delete
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox
+              checked={multipleUpload}
+              onCheckedChange={(checked) => setMultipleUpload(checked === true)}
+              aria-label="Enable multiple upload"
+            />
+            Multiple upload
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox
+              checked={copyFolderToFolder}
+              onCheckedChange={(checked) => setCopyFolderToFolder(checked === true)}
+              aria-label="Enable folder copy"
+            />
+            Copy folder to folder
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox
+              checked={copyBucketToBucket}
+              onCheckedChange={(checked) => setCopyBucketToBucket(checked === true)}
+              aria-label="Enable bucket copy"
+            />
+            Copy bucket to bucket
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox
+              checked={auditLogs}
+              onCheckedChange={(checked) => setAuditLogs(checked === true)}
+              aria-label="Enable audit logs"
+            />
+            Audit logs access
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox
+              checked={searchAllFiles}
+              onCheckedChange={(checked) => setSearchAllFiles(checked === true)}
+              aria-label="Enable search all files"
+            />
+            Search all files
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox
+              checked={syncTasks}
+              onCheckedChange={(checked) => setSyncTasks(checked === true)}
+              aria-label="Enable sync tasks"
+            />
+            Sync tasks
           </label>
         </div>
       </div>
@@ -212,6 +301,7 @@ export default function AdminPlansPage() {
   const queryClient = useQueryClient()
   const [createOpen, setCreateOpen] = useState(false)
   const [editPlan, setEditPlan] = useState<Plan | null>(null)
+  const [pendingDeletePlan, setPendingDeletePlan] = useState<Plan | null>(null)
 
   const { data, isLoading } = useQuery<{ plans: Plan[] }>({
     queryKey: ["admin-plans"],
@@ -302,8 +392,7 @@ export default function AdminPlansPage() {
                 <TableHead>Name</TableHead>
                 <TableHead>Price</TableHead>
                 <TableHead>Limits</TableHead>
-                <TableHead>Thumb Cache</TableHead>
-                <TableHead>Transfers</TableHead>
+                <TableHead>Action Flags</TableHead>
                 <TableHead>Subs</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -321,18 +410,24 @@ export default function AdminPlansPage() {
                       : `$${(plan.priceMonthly / 100).toFixed(2)}/mo`}
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
-                    {plan.bucketLimit === 0 ? "∞" : plan.bucketLimit} buckets,{" "}
+                    {(plan.bucketLimit === 0 ||
+                      ((plan.slug === "pro" || plan.slug === "enterprise") &&
+                        plan.bucketLimit >= 1000))
+                      ? "∞"
+                      : plan.bucketLimit} buckets,{" "}
                     {plan.fileLimit === 0 ? "∞" : plan.fileLimit.toLocaleString()} files
                   </TableCell>
                   <TableCell>
-                    <Badge variant={plan.thumbnailCache ? "default" : "secondary"}>
-                      {plan.thumbnailCache ? "On" : "Off"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={plan.transferTasks ? "default" : "secondary"}>
-                      {plan.transferTasks ? "On" : "Off"}
-                    </Badge>
+                    <div className="flex max-w-[420px] flex-wrap gap-1">
+                      <Badge variant={plan.thumbnailCache ? "default" : "secondary"}>Thumb</Badge>
+                      <Badge variant={plan.recursiveDelete ? "default" : "secondary"}>RecurDel</Badge>
+                      <Badge variant={plan.multipleUpload ? "default" : "secondary"}>MultiUp</Badge>
+                      <Badge variant={plan.copyFolderToFolder ? "default" : "secondary"}>Copy F-to-F</Badge>
+                      <Badge variant={plan.copyBucketToBucket ? "default" : "secondary"}>Copy B-to-B</Badge>
+                      <Badge variant={plan.auditLogs ? "default" : "secondary"}>Audit</Badge>
+                      <Badge variant={plan.searchAllFiles ? "default" : "secondary"}>Search</Badge>
+                      <Badge variant={plan.syncTasks ? "default" : "secondary"}>Sync</Badge>
+                    </div>
                   </TableCell>
                   <TableCell>{plan._count.subscriptions}</TableCell>
                   <TableCell>
@@ -387,9 +482,12 @@ export default function AdminPlansPage() {
                         variant="ghost"
                         size="sm"
                         onClick={() => {
-                          if (confirm(`Delete plan "${plan.name}"?`)) {
+                          if (hasDestructiveConfirmBypass(DESTRUCTIVE_CONFIRM_SCOPE)) {
                             deleteMutation.mutate(plan.id)
+                            return
                           }
+
+                          setPendingDeletePlan(plan)
                         }}
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
@@ -400,7 +498,7 @@ export default function AdminPlansPage() {
               ))}
               {plans.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center text-muted-foreground">
+                  <TableCell colSpan={9} className="text-center text-muted-foreground">
                     No plans yet. Create one to get started.
                   </TableCell>
                 </TableRow>
@@ -409,6 +507,29 @@ export default function AdminPlansPage() {
           </Table>
         </div>
       )}
+
+      <DestructiveConfirmDialog
+        open={Boolean(pendingDeletePlan)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingDeletePlan(null)
+          }
+        }}
+        title="Confirm plan deletion"
+        description={
+          pendingDeletePlan
+            ? `Delete plan \"${pendingDeletePlan.name}\"?`
+            : "Delete plan?"
+        }
+        actionLabel="Delete Plan"
+        onConfirm={async () => {
+          if (!pendingDeletePlan) {
+            throw new Error("Missing plan context")
+          }
+          await deleteMutation.mutateAsync(pendingDeletePlan.id)
+          setPendingDeletePlan(null)
+        }}
+      />
     </div>
   )
 }

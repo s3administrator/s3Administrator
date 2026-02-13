@@ -10,11 +10,14 @@ export async function GET() {
   }
 
   const fileCount = await prisma.fileMetadata.count({
-    where: { userId: session.user.id },
+    where: {
+      userId: session.user.id,
+      isFolder: false,
+    },
   })
 
   const bucketCount = await prisma.fileMetadata.groupBy({
-    by: ["bucket"],
+    by: ["credentialId", "bucket"],
     where: { userId: session.user.id },
   })
 

@@ -9,8 +9,24 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Loader2, AlertTriangle } from "lucide-react"
 import { toast } from "sonner"
+import {
+  DESTRUCTIVE_CONFIRM_PHRASE,
+  DESTRUCTIVE_CONFIRM_SCOPE,
+  hasDestructiveConfirmBypass,
+  setDestructiveConfirmBypass,
+  type DestructiveConfirmRememberOption,
+} from "@/lib/destructive-confirmation"
 import type { S3Object } from "@/types"
 
 interface DryRunSummary {
@@ -47,6 +63,10 @@ export function DeleteConfirmDialog({
   const [isLoadingPreview, setIsLoadingPreview] = useState(false)
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [preview, setPreview] = useState<DryRunSummary | null>(null)
+  const [confirmValue, setConfirmValue] = useState("")
+  const [rememberOption, setRememberOption] =
+    useState<DestructiveConfirmRememberOption>("ask")
+  const [bypassActive, setBypassActive] = useState(false)
 
   const folders = useMemo(() => items.filter((i) => i.isFolder), [items])
   const files = useMemo(() => items.filter((i) => !i.isFolder), [items])
@@ -80,8 +100,13 @@ export function DeleteConfirmDialog({
     if (!open || items.length === 0) {
       setPreview(null)
       setPreviewError(null)
+      setConfirmValue("")
       return
     }
+
+    const activeBypass = hasDestructiveConfirmBypass(DESTRUCTIVE_CONFIRM_SCOPE)
+    setBypassActive(activeBypass)
+    setRememberOption(activeBypass ? "one_hour" : "ask")
 
     let cancelled = false
 
@@ -126,6 +151,12 @@ export function DeleteConfirmDialog({
   }, [open, items, baseDeleteBody])
 
   async function handleDelete() {
+    const activeBypass = hasDestructiveConfirmBypass(DESTRUCTIVE_CONFIRM_SCOPE)
+    if (!activeBypass && confirmValue.trim() !== DESTRUCTIVE_CONFIRM_PHRASE) {
+      toast.error(`Type "${DESTRUCTIVE_CONFIRM_PHRASE}" to confirm delete`)
+      return
+    }
+
     setIsDeleting(true)
     try {
       const res = await fetch("/api/s3/delete", {
@@ -137,6 +168,7 @@ export function DeleteConfirmDialog({
       if (!res.ok) throw new Error("Delete failed")
 
       const data = await res.json()
+      setDestructiveConfirmBypass(DESTRUCTIVE_CONFIRM_SCOPE, rememberOption)
       toast.success(`Deleted ${data.deleted} item(s)`)
       await onDeleteComplete()
       onOpenChange(false)
@@ -213,6 +245,46 @@ export function DeleteConfirmDialog({
           ))}
         </div>
 
+        <div className="space-y-3 rounded-md border border-destructive/40 bg-destructive/5 p-3">
+          {!bypassActive ? (
+            <div className="space-y-1">
+              <Label htmlFor="delete-confirm-input">Confirmation</Label>
+              <p className="text-xs text-muted-foreground">
+                Type <span className="font-mono">{DESTRUCTIVE_CONFIRM_PHRASE}</span> to
+                continue.
+              </p>
+              <Input
+                id="delete-confirm-input"
+                value={confirmValue}
+                onChange={(event) => setConfirmValue(event.target.value)}
+                placeholder={DESTRUCTIVE_CONFIRM_PHRASE}
+                autoComplete="off"
+              />
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Confirmation bypass is currently active on this browser.
+            </p>
+          )}
+          <div className="space-y-1">
+            <Label htmlFor="delete-confirm-remember">Prompt behavior</Label>
+            <Select
+              value={rememberOption}
+              onValueChange={(value) =>
+                setRememberOption(value as DestructiveConfirmRememberOption)
+              }
+            >
+              <SelectTrigger id="delete-confirm-remember" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ask">Ask every time</SelectItem>
+                <SelectItem value="one_hour">Don&apos;t ask again for 1 hour</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
         <div className="flex justify-end gap-2">
           <Button
             variant="outline"
@@ -224,7 +296,11 @@ export function DeleteConfirmDialog({
           <Button
             variant="destructive"
             onClick={handleDelete}
-            disabled={isDeleting || isLoadingPreview}
+            disabled={
+              isDeleting ||
+              isLoadingPreview ||
+              (!bypassActive && confirmValue.trim() !== DESTRUCTIVE_CONFIRM_PHRASE)
+            }
           >
             {isDeleting ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />

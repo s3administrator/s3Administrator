@@ -3,6 +3,8 @@ import { auth } from "@/lib/auth"
 import { getS3Client } from "@/lib/s3"
 import { prisma } from "@/lib/db"
 import { getObjectExtension, rebuildUserExtensionStats } from "@/lib/file-stats"
+import { getUserPlanEntitlements } from "@/lib/plan-entitlements"
+import { getBucketLimitViolation } from "@/lib/plan-limits"
 import { moveObjectSchema } from "@/lib/validations"
 import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
 import { getRequestContext, logUserAuditAction } from "@/lib/audit-logger"
@@ -47,6 +49,32 @@ export async function POST(request: NextRequest) {
     auditSourceBucket = fromBucket
     auditOperationCount = operations.length
     const { client, credential } = await getS3Client(session.user.id, credentialId)
+
+    if (fromBucket !== bucket) {
+      const entitlements = await getUserPlanEntitlements(session.user.id)
+      if (!entitlements) {
+        return NextResponse.json(
+          { error: "Failed to resolve plan entitlements" },
+          { status: 403 }
+        )
+      }
+
+      const bucketLimitViolation = await getBucketLimitViolation({
+        userId: session.user.id,
+        credentialId: credential.id,
+        bucket,
+        entitlements,
+      })
+      if (bucketLimitViolation) {
+        return NextResponse.json(
+          {
+            error: "Bucket limit reached for current plan",
+            details: bucketLimitViolation,
+          },
+          { status: 400 }
+        )
+      }
+    }
 
     let movedCount = 0
     let thumbnailMoved = 0

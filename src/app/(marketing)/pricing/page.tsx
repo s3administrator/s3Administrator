@@ -29,6 +29,13 @@ function formatLimit(n: number): string {
   return n.toLocaleString()
 }
 
+function formatBucketLimit(plan: { slug: string; bucketLimit: number }): string {
+  if (plan.slug === "pro" || plan.slug === "enterprise") {
+    if (plan.bucketLimit >= 1000) return "Unlimited"
+  }
+  return formatLimit(plan.bucketLimit)
+}
+
 function isContactPlan(plan: {
   priceMonthly: number
   stripePriceId: string | null
@@ -144,7 +151,7 @@ export default async function PricingPage() {
                 <ul className="space-y-2">
                   <li className="flex items-center gap-2 text-sm">
                     <Check className="h-4 w-4 text-primary" />
-                    {formatLimit(plan.bucketLimit)} bucket
+                    {formatBucketLimit(plan)} bucket
                     {plan.bucketLimit !== 1 ? "s" : ""}
                   </li>
                   <li className="flex items-center gap-2 text-sm">

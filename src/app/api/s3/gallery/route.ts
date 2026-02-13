@@ -4,6 +4,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/db"
 import { getS3Client } from "@/lib/s3"
+import { getUserPlanEntitlements } from "@/lib/plan-entitlements"
 import { getMediaTypeFromExtension, type MediaType } from "@/lib/media"
 import { galleryListSchema } from "@/lib/validations"
 import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
@@ -87,6 +88,12 @@ export async function GET(request: NextRequest) {
     if (!limitResult.success) {
       return rateLimitResponse(limitResult.retryAfterSeconds)
     }
+
+    const entitlements = await getUserPlanEntitlements(session.user.id)
+    if (!entitlements) {
+      return NextResponse.json({ error: "Failed to resolve plan entitlements" }, { status: 403 })
+    }
+    const previewEnabled = entitlements.thumbnailCache
 
     const { searchParams } = request.nextUrl
     const parsed = galleryListSchema.safeParse({
@@ -208,7 +215,9 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    const videoKeys = directFiles.filter((entry) => entry.isVideo).map((entry) => entry.key)
+    const videoKeys = previewEnabled
+      ? directFiles.filter((entry) => entry.isVideo).map((entry) => entry.key)
+      : []
     const thumbnailRows = videoKeys.length > 0
       ? await prisma.mediaThumbnail.findMany({
           where: {
@@ -256,7 +265,8 @@ export async function GET(request: NextRequest) {
         extension: entry.extension,
         mediaType: entry.mediaType,
         isVideo: entry.isVideo,
-        thumbnailStatus: entry.isVideo ? (thumbnail?.status ?? "pending") : null,
+        thumbnailStatus:
+          previewEnabled && entry.isVideo ? (thumbnail?.status ?? "pending") : null,
         thumbnailBucket: thumbnail?.thumbnailBucket ?? defaultThumbnailBucket,
         thumbnailKey: thumbnail?.thumbnailKey ?? null,
       }
@@ -291,7 +301,9 @@ export async function GET(request: NextRequest) {
 
         let previewUrl: string | null = null
 
-        if (!candidate.isVideo) {
+        if (!previewEnabled) {
+          previewUrl = null
+        } else if (!candidate.isVideo) {
           try {
             previewUrl = await getSignedUrl(
               client,
@@ -356,11 +368,12 @@ export async function GET(request: NextRequest) {
         bucket,
         credentialId: credential.id,
         prefix: resolvedPrefix,
-        mediaType,
-        limit,
-        returned: items.length,
-        hasMore,
-        offset: start,
+          mediaType,
+          limit,
+          previewEnabled,
+          returned: items.length,
+          hasMore,
+          offset: start,
       },
       ...requestContext,
     })

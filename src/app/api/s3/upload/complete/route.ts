@@ -3,6 +3,11 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/db"
 import { getS3Client } from "@/lib/s3"
 import { getObjectExtension, rebuildUserExtensionStats } from "@/lib/file-stats"
+import { getUserPlanEntitlements } from "@/lib/plan-entitlements"
+import {
+  getAdditionalFileLimitViolation,
+  getBucketLimitViolation,
+} from "@/lib/plan-limits"
 import { getRequestContext, logUserAuditAction } from "@/lib/audit-logger"
 
 interface UploadCompleteItem {
@@ -38,10 +43,78 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { credential } = await getS3Client(session.user.id, credentialId)
+    const entitlements = await getUserPlanEntitlements(session.user.id)
+    if (!entitlements) {
+      return NextResponse.json({ error: "Failed to resolve plan entitlements" }, { status: 403 })
+    }
 
-    for (const item of items) {
-      if (!item?.key || typeof item.key !== "string") continue
+    if (items.length > 1 && !entitlements.multipleUpload) {
+      return NextResponse.json(
+        {
+          error: "Multiple upload finalize is disabled for the current plan",
+          details: {
+            plan: entitlements.slug,
+            planSource: entitlements.source,
+          },
+        },
+        { status: 403 }
+      )
+    }
+
+    const { credential } = await getS3Client(session.user.id, credentialId)
+    const bucketLimitViolation = await getBucketLimitViolation({
+      userId: session.user.id,
+      credentialId: credential.id,
+      bucket,
+      entitlements,
+    })
+    if (bucketLimitViolation) {
+      return NextResponse.json(
+        {
+          error: "Bucket limit reached for current plan",
+          details: bucketLimitViolation,
+        },
+        { status: 400 }
+      )
+    }
+
+    const normalizedItems = items.filter(
+      (item): item is UploadCompleteItem => Boolean(item?.key && typeof item.key === "string")
+    )
+    if (normalizedItems.length === 0) {
+      return NextResponse.json({ error: "No valid upload items were provided" }, { status: 400 })
+    }
+
+    const uniqueKeys = Array.from(new Set(normalizedItems.map((item) => item.key)))
+    const existingRows = await prisma.fileMetadata.findMany({
+      where: {
+        userId: session.user.id,
+        credentialId: credential.id,
+        bucket,
+        key: { in: uniqueKeys },
+        isFolder: false,
+      },
+      select: { key: true },
+    })
+    const existingKeys = new Set(existingRows.map((row) => row.key))
+    const newFileCount = uniqueKeys.filter((key) => !existingKeys.has(key)).length
+
+    const fileLimitViolation = await getAdditionalFileLimitViolation({
+      userId: session.user.id,
+      requestedAdditionalFiles: newFileCount,
+      entitlements,
+    })
+    if (fileLimitViolation) {
+      return NextResponse.json(
+        {
+          error: "Cached file limit reached for current plan",
+          details: fileLimitViolation,
+        },
+        { status: 400 }
+      )
+    }
+
+    for (const item of normalizedItems) {
       const size = Number.isFinite(item.size) && item.size >= 0 ? item.size : 0
       const lastModified = item.lastModified ? new Date(item.lastModified) : new Date()
 
@@ -84,12 +157,12 @@ export async function POST(request: NextRequest) {
       metadata: {
         bucket,
         credentialId: credential.id,
-        items: items.length,
+        items: normalizedItems.length,
       },
       ...requestContext,
     })
 
-    return NextResponse.json({ updated: items.length })
+    return NextResponse.json({ updated: normalizedItems.length })
   } catch (error) {
     console.error("Failed to finalize uploaded metadata:", error)
     if (userId) {

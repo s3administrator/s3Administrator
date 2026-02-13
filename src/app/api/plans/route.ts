@@ -15,6 +15,13 @@ export async function GET() {
       features: true,
       thumbnailCache: true,
       transferTasks: true,
+      recursiveDelete: true,
+      multipleUpload: true,
+      copyFolderToFolder: true,
+      copyBucketToBucket: true,
+      auditLogs: true,
+      searchAllFiles: true,
+      syncTasks: true,
       stripePriceId: true,
     },
   })

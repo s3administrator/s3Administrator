@@ -10,6 +10,7 @@ import {
   parseCsvValues,
   parseScopes,
 } from "@/lib/file-search"
+import { getUserPlanEntitlements } from "@/lib/plan-entitlements"
 import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
 
 interface SearchResultRow {
@@ -34,6 +35,20 @@ export async function GET(request: NextRequest) {
 
     const rl = rateLimitByUser(session.user.id, "s3-search", 60)
     if (!rl.success) return rateLimitResponse(rl.retryAfterSeconds)
+
+    const entitlements = await getUserPlanEntitlements(session.user.id)
+    if (!entitlements?.searchAllFiles) {
+      return NextResponse.json(
+        {
+          error: "Search all files is disabled for the current plan",
+          details: {
+            plan: entitlements?.slug ?? "free",
+            planSource: entitlements?.source ?? "default",
+          },
+        },
+        { status: 403 }
+      )
+    }
 
     const { searchParams } = request.nextUrl
     const query = searchParams.get("q") || ""

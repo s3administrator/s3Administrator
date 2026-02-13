@@ -19,8 +19,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { DestructiveConfirmDialog } from "@/components/shared/destructive-confirm-dialog"
 import { toast } from "sonner"
 import { Trash2 } from "lucide-react"
+import {
+  DESTRUCTIVE_CONFIRM_SCOPE,
+  hasDestructiveConfirmBypass,
+} from "@/lib/destructive-confirmation"
 
 interface AdminUser {
   id: string
@@ -37,6 +42,7 @@ interface AdminUser {
 export default function AdminUsersPage() {
   const queryClient = useQueryClient()
   const [page, setPage] = useState(1)
+  const [pendingDeleteUser, setPendingDeleteUser] = useState<AdminUser | null>(null)
 
   const { data, isLoading } = useQuery<{
     users: AdminUser[]
@@ -187,13 +193,12 @@ export default function AdminUsersPage() {
                         variant="ghost"
                         size="sm"
                         onClick={() => {
-                          if (
-                            confirm(
-                              `Delete user "${user.email}"? This will cancel their subscriptions and remove all their data.`
-                            )
-                          ) {
+                          if (hasDestructiveConfirmBypass(DESTRUCTIVE_CONFIRM_SCOPE)) {
                             deleteMutation.mutate(user.id)
+                            return
                           }
+
+                          setPendingDeleteUser(user)
                         }}
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
@@ -230,6 +235,29 @@ export default function AdminUsersPage() {
           )}
         </>
       )}
+
+      <DestructiveConfirmDialog
+        open={Boolean(pendingDeleteUser)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingDeleteUser(null)
+          }
+        }}
+        title="Confirm user deletion"
+        description={
+          pendingDeleteUser
+            ? `Delete user \"${pendingDeleteUser.email}\"? This cancels subscriptions and removes all user data.`
+            : "Delete user?"
+        }
+        actionLabel="Delete User"
+        onConfirm={async () => {
+          if (!pendingDeleteUser) {
+            throw new Error("Missing user context")
+          }
+          await deleteMutation.mutateAsync(pendingDeleteUser.id)
+          setPendingDeleteUser(null)
+        }}
+      />
     </div>
   )
 }

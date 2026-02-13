@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { getS3Client } from "@/lib/s3"
 import { prisma } from "@/lib/db"
 import { rebuildUserExtensionStats } from "@/lib/file-stats"
+import { getUserPlanEntitlements } from "@/lib/plan-entitlements"
 import { deleteObjectsSchema } from "@/lib/validations"
 import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
 import { getRequestContext, logUserAuditAction } from "@/lib/audit-logger"
@@ -111,6 +112,23 @@ export async function POST(request: NextRequest) {
 
     const { bucket, credentialId, keys, prefixes, dryRun } = parsed.data
     auditBucket = bucket
+
+    if (prefixes && prefixes.length > 0) {
+      const entitlements = await getUserPlanEntitlements(session.user.id)
+      if (!entitlements?.recursiveDelete) {
+        return NextResponse.json(
+          {
+            error: "Recursive delete is disabled for the current plan",
+            details: {
+              plan: entitlements?.slug ?? "free",
+              planSource: entitlements?.source ?? "default",
+            },
+          },
+          { status: 403 }
+        )
+      }
+    }
+
     const { client, credential } = await getS3Client(session.user.id, credentialId)
 
     if (dryRun) {

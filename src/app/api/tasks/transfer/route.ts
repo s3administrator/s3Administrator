@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/db"
 import { getS3Client } from "@/lib/s3"
 import { getUserPlanEntitlements } from "@/lib/plan-entitlements"
+import { getBucketLimitViolation } from "@/lib/plan-limits"
 import {
   getObjectTransferDisabledMessage,
 } from "@/lib/transfer-task-policy"
@@ -26,6 +27,36 @@ function isOperationAllowed(scope: TransferScope, operation: TransferOperation):
   return operation === "sync" || operation === "copy" || operation === "migrate"
 }
 
+function getOperationDisabledMessage(scope: TransferScope, operation: TransferOperation): string | null {
+  if (operation === "sync") {
+    return "Sync tasks are disabled for the current plan"
+  }
+  if (scope === "folder" && (operation === "copy" || operation === "move")) {
+    return "Folder transfer tasks are disabled for the current plan"
+  }
+  if (scope === "bucket" && (operation === "copy" || operation === "migrate")) {
+    return "Bucket transfer tasks are disabled for the current plan"
+  }
+  return null
+}
+
+function isOperationEnabledByPlan(
+  entitlements: NonNullable<Awaited<ReturnType<typeof getUserPlanEntitlements>>>,
+  scope: TransferScope,
+  operation: TransferOperation
+): boolean {
+  if (operation === "sync") {
+    return entitlements.syncTasks
+  }
+  if (scope === "folder" && (operation === "copy" || operation === "move")) {
+    return entitlements.copyFolderToFolder
+  }
+  if (scope === "bucket" && (operation === "copy" || operation === "migrate")) {
+    return entitlements.copyBucketToBucket
+  }
+  return false
+}
+
 export async function POST(request: NextRequest) {
   try {
     const session = await auth()
@@ -39,7 +70,7 @@ export async function POST(request: NextRequest) {
     }
 
     const entitlements = await getUserPlanEntitlements(session.user.id)
-    if (!entitlements?.transferTasks) {
+    if (!entitlements || !entitlements.transferTasks) {
       return NextResponse.json(
         {
           error: getObjectTransferDisabledMessage(),
@@ -79,6 +110,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (!isOperationEnabledByPlan(entitlements, scope, operation)) {
+      return NextResponse.json(
+        {
+          error: getOperationDisabledMessage(scope, operation) ?? "Transfer operation is disabled for the current plan",
+          details: {
+            plan: entitlements.slug,
+            planSource: entitlements.source,
+            scope,
+            operation,
+          },
+        },
+        { status: 403 }
+      )
+    }
+
     const normalizedSourcePrefix = scope === "folder" ? normalizeFolderPrefix(sourcePrefix) : ""
     const normalizedDestinationPrefix = scope === "folder" ? normalizeFolderPrefix(destinationPrefix) : ""
 
@@ -107,6 +153,27 @@ export async function POST(request: NextRequest) {
         { error: "Source and destination cannot be identical" },
         { status: 400 }
       )
+    }
+
+    const destinationContextChanged =
+      sourceCredential.id !== destinationCredential.id ||
+      sourceBucket !== destinationBucket
+    if (destinationContextChanged) {
+      const bucketLimitViolation = await getBucketLimitViolation({
+        userId: session.user.id,
+        credentialId: destinationCredential.id,
+        bucket: destinationBucket,
+        entitlements,
+      })
+      if (bucketLimitViolation) {
+        return NextResponse.json(
+          {
+            error: "Bucket limit reached for current plan",
+            details: bucketLimitViolation,
+          },
+          { status: 400 }
+        )
+      }
     }
 
     const sourceWhere = {
@@ -203,7 +270,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       task,
       sourceCachedFileCount,
-      note: "Only cached source files are processed for transfer tasks.",
+      note:
+        operation === "sync"
+          ? "Sync mirrors cached source files and deletes destination-only cached files in the selected scope."
+          : "Only cached source files are processed for transfer tasks.",
     })
   } catch (error) {
     console.error("Failed to create transfer task:", error)

@@ -16,6 +16,11 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { FolderPickerDialog } from "@/components/dashboard/folder-picker-dialog"
+import { DestructiveConfirmDialog } from "@/components/shared/destructive-confirm-dialog"
+import {
+  DESTRUCTIVE_CONFIRM_SCOPE,
+  hasDestructiveConfirmBypass,
+} from "@/lib/destructive-confirmation"
 
 type TaskScope = "folder" | "bucket"
 type TaskOperation = "sync" | "copy" | "move" | "migrate"
@@ -35,6 +40,17 @@ interface TaskRow {
   title: string
   status: "pending" | "in_progress" | "completed" | "failed"
   updatedAt: string
+}
+
+interface TransferTaskCreateBody {
+  scope: TaskScope
+  operation: TaskOperation
+  sourceBucket: string
+  sourceCredentialId: string
+  sourcePrefix?: string
+  destinationBucket: string
+  destinationCredentialId: string
+  destinationPrefix?: string
 }
 
 function getStatusVariant(status: TaskRow["status"]): "default" | "secondary" | "destructive" | "outline" {
@@ -68,6 +84,8 @@ export default function TasksPage() {
   const [destinationPrefix, setDestinationPrefix] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [polling, setPolling] = useState(false)
+  const [transferConfirmOpen, setTransferConfirmOpen] = useState(false)
+  const [pendingTransferBody, setPendingTransferBody] = useState<TransferTaskCreateBody | null>(null)
 
   const { data: credentials = [] } = useQuery<Credential[]>({
     queryKey: ["credentials"],
@@ -151,47 +169,44 @@ export default function TasksPage() {
     setDestinationPrefix("")
   }, [destinationCredentialId, destinationBucket])
 
-  async function handleStartTask() {
+  const destructiveTask = operation === "sync" || operation === "move" || operation === "migrate"
+
+  function buildTransferTaskBody(): TransferTaskCreateBody | null {
     if (!sourceCredentialId || !destinationCredentialId) {
       toast.error("Select source and destination accounts")
-      return
+      return null
     }
     if (!sourceBucket || !destinationBucket) {
       toast.error("Select source and destination buckets")
-      return
+      return null
     }
     if (scope === "folder") {
       if (!sourcePrefix.trim() || !destinationPrefix.trim()) {
         toast.error("Source and destination folder prefixes are required")
-        return
+        return null
       }
     }
 
+    const body: TransferTaskCreateBody = {
+      scope,
+      operation,
+      sourceBucket,
+      sourceCredentialId,
+      destinationBucket,
+      destinationCredentialId,
+    }
+
+    if (scope === "folder") {
+      body.sourcePrefix = sourcePrefix.trim()
+      body.destinationPrefix = destinationPrefix.trim()
+    }
+
+    return body
+  }
+
+  async function createTransferTask(body: TransferTaskCreateBody) {
     setSubmitting(true)
     try {
-      const body: {
-        scope: TaskScope
-        operation: TaskOperation
-        sourceBucket: string
-        sourceCredentialId: string
-        sourcePrefix?: string
-        destinationBucket: string
-        destinationCredentialId: string
-        destinationPrefix?: string
-      } = {
-        scope,
-        operation,
-        sourceBucket,
-        sourceCredentialId,
-        destinationBucket,
-        destinationCredentialId,
-      }
-
-      if (scope === "folder") {
-        body.sourcePrefix = sourcePrefix.trim()
-        body.destinationPrefix = destinationPrefix.trim()
-      }
-
       const res = await fetch("/api/tasks/transfer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -213,8 +228,26 @@ export default function TasksPage() {
       toast.success("Task created")
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to start task")
+      throw error
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function handleStartTask() {
+    const body = buildTransferTaskBody()
+    if (!body) return
+
+    if (destructiveTask && !hasDestructiveConfirmBypass(DESTRUCTIVE_CONFIRM_SCOPE)) {
+      setPendingTransferBody(body)
+      setTransferConfirmOpen(true)
+      return
+    }
+
+    try {
+      await createTransferTask(body)
+    } catch {
+      // createTransferTask already handled toast
     }
   }
 
@@ -279,7 +312,7 @@ export default function TasksPage() {
             <CardTitle>Start New Task</CardTitle>
             <CardDescription>
               Transfers run on cached files only and follow plan limits. Sync tasks run continuously every
-              minute until deleted.
+              minute until deleted. Sync now mirrors the destination scope and deletes destination-only files.
             </CardDescription>
           </div>
           <Button
@@ -428,6 +461,12 @@ export default function TasksPage() {
               {submitting ? "Starting..." : "Start Task"}
             </Button>
           </div>
+
+          {destructiveTask ? (
+            <p className="text-xs text-destructive">
+              This operation can delete data. You will be asked to type confirmation unless bypass is active.
+            </p>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -459,6 +498,32 @@ export default function TasksPage() {
           )}
         </CardContent>
       </Card>
+
+      <DestructiveConfirmDialog
+        open={transferConfirmOpen}
+        onOpenChange={(open) => {
+          setTransferConfirmOpen(open)
+          if (!open) {
+            setPendingTransferBody(null)
+          }
+        }}
+        title="Confirm destructive transfer"
+        description={
+          operation === "sync"
+            ? "Sync mirrors destination to source scope and deletes destination-only files."
+            : operation === "move" || operation === "migrate"
+              ? "Move and migrate delete source objects after copying them to destination."
+              : "This operation can delete objects."
+        }
+        actionLabel="Start Task"
+        onConfirm={async () => {
+          if (!pendingTransferBody) {
+            throw new Error("Missing transfer payload")
+          }
+          await createTransferTask(pendingTransferBody)
+          setPendingTransferBody(null)
+        }}
+      />
     </div>
   )
 }

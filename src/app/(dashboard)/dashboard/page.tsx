@@ -12,10 +12,15 @@ import { UploadDialog } from "@/components/dashboard/upload-dialog"
 import { DeleteConfirmDialog } from "@/components/dashboard/delete-confirm-dialog"
 import { RenameDialog } from "@/components/dashboard/rename-dialog"
 import { NewFolderDialog } from "@/components/dashboard/new-folder-dialog"
+import { DestructiveConfirmDialog } from "@/components/shared/destructive-confirm-dialog"
 import { DashboardOverview } from "@/components/dashboard/dashboard-overview"
 import { EmptyState } from "@/components/dashboard/empty-state"
 import { Loader2 } from "lucide-react"
 import { toast } from "sonner"
+import {
+  DESTRUCTIVE_CONFIRM_SCOPE,
+  hasDestructiveConfirmBypass,
+} from "@/lib/destructive-confirmation"
 import type { GalleryResponse, S3Object } from "@/types"
 
 interface MoveOperation {
@@ -70,6 +75,8 @@ function DashboardContent() {
   const [newFolderOpen, setNewFolderOpen] = useState(false)
   const [newFolderMoveItems, setNewFolderMoveItems] = useState<S3Object[] | null>(null)
   const [moveProgress, setMoveProgress] = useState<MoveProgressState | null>(null)
+  const [moveConfirmOpen, setMoveConfirmOpen] = useState(false)
+  const [pendingMoveAction, setPendingMoveAction] = useState<(() => Promise<void>) | null>(null)
   const [renameTarget, setRenameTarget] = useState<{
     key: string
     isFolder: boolean
@@ -516,6 +523,39 @@ function DashboardContent() {
     }))
   }
 
+  async function executeMoveWorkflow(params: {
+    items: S3Object[]
+    destinationFolderKey: string
+    successMessage: (moved: number) => string
+  }) {
+    const { items, destinationFolderKey, successMessage } = params
+
+    try {
+      const moved = await moveItemsToFolder(items, destinationFolderKey)
+      startSyncProgress(destinationFolderKey)
+      await handleBucketOperationComplete()
+      toast.success(successMessage(moved))
+      setNewFolderMoveItems(null)
+    } catch (error) {
+      startSyncProgress(destinationFolderKey)
+      await handleBucketOperationComplete()
+      const message = error instanceof Error ? error.message : "Failed to move selected items"
+      toast.error(message)
+    } finally {
+      setMoveProgress(null)
+    }
+  }
+
+  async function runMoveWithOptionalConfirm(action: () => Promise<void>) {
+    if (hasDestructiveConfirmBypass(DESTRUCTIVE_CONFIRM_SCOPE)) {
+      await action()
+      return
+    }
+
+    setPendingMoveAction(() => action)
+    setMoveConfirmOpen(true)
+  }
+
   async function handleMoveToSelectedFolder() {
     if (moveProgress) return
 
@@ -534,20 +574,13 @@ function DashboardContent() {
       return
     }
 
-    try {
-      const moved = await moveItemsToFolder(itemsToMove, destinationFolder.key)
-      startSyncProgress(destinationFolder.key)
-      await handleBucketOperationComplete()
-      toast.success(`Moved ${moved} item(s)`)
-      setNewFolderMoveItems(null)
-    } catch (error) {
-      startSyncProgress(destinationFolder.key)
-      await handleBucketOperationComplete()
-      const message = error instanceof Error ? error.message : "Failed to move selected items"
-      toast.error(message)
-    } finally {
-      setMoveProgress(null)
-    }
+    await runMoveWithOptionalConfirm(() =>
+      executeMoveWorkflow({
+        items: itemsToMove,
+        destinationFolderKey: destinationFolder.key,
+        successMessage: (moved) => `Moved ${moved} item(s)`,
+      })
+    )
   }
 
   return (
@@ -728,24 +761,39 @@ function DashboardContent() {
         prefix={prefix}
         onCreateComplete={async (createdFolderKey) => {
           if (newFolderMoveItems && newFolderMoveItems.length > 0) {
-            try {
-              const moved = await moveItemsToFolder(newFolderMoveItems, createdFolderKey)
-              startSyncProgress(createdFolderKey)
-              await handleBucketOperationComplete()
-              toast.success(`Moved ${moved} item(s) to ${getBaseNameFromKey(createdFolderKey, true)}`)
-            } catch (error) {
-              startSyncProgress(createdFolderKey)
-              await handleBucketOperationComplete()
-              const message = error instanceof Error ? error.message : "Failed to move selected items"
-              toast.error(message)
-            } finally {
-              setMoveProgress(null)
-            }
+            await runMoveWithOptionalConfirm(() =>
+              executeMoveWorkflow({
+                items: newFolderMoveItems,
+                destinationFolderKey: createdFolderKey,
+                successMessage: (moved) =>
+                  `Moved ${moved} item(s) to ${getBaseNameFromKey(createdFolderKey, true)}`,
+              })
+            )
           } else {
             await handleBucketOperationComplete()
           }
 
           setNewFolderMoveItems(null)
+        }}
+      />
+
+      <DestructiveConfirmDialog
+        open={moveConfirmOpen}
+        onOpenChange={(open) => {
+          setMoveConfirmOpen(open)
+          if (!open) {
+            setPendingMoveAction(null)
+          }
+        }}
+        title="Confirm move operation"
+        description="Moving objects deletes them from the source location after copy."
+        actionLabel="Move Objects"
+        onConfirm={async () => {
+          if (!pendingMoveAction) {
+            throw new Error("Missing move action")
+          }
+          await pendingMoveAction()
+          setPendingMoveAction(null)
         }}
       />
 

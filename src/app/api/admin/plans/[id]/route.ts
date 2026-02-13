@@ -11,11 +11,18 @@ import { z } from "zod/v4"
 const updatePlanSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   priceMonthly: z.number().int().min(0).optional(),
-  bucketLimit: z.number().int().min(0).optional(),
+  bucketLimit: z.number().int().min(1).max(1000).optional(),
   fileLimit: z.number().int().min(0).optional(),
   features: z.array(z.string()).optional(),
   thumbnailCache: z.boolean().optional(),
   transferTasks: z.boolean().optional(),
+  recursiveDelete: z.boolean().optional(),
+  multipleUpload: z.boolean().optional(),
+  copyFolderToFolder: z.boolean().optional(),
+  copyBucketToBucket: z.boolean().optional(),
+  auditLogs: z.boolean().optional(),
+  searchAllFiles: z.boolean().optional(),
+  syncTasks: z.boolean().optional(),
   isActive: z.boolean().optional(),
   sortOrder: z.number().int().optional(),
 })
@@ -93,8 +100,14 @@ export async function PATCH(
     parsed.data.thumbnailCache !== undefined &&
     parsed.data.thumbnailCache !== plan.thumbnailCache
   const transferPolicyChanged =
-    parsed.data.transferTasks !== undefined &&
-    parsed.data.transferTasks !== plan.transferTasks
+    (parsed.data.transferTasks !== undefined &&
+      parsed.data.transferTasks !== plan.transferTasks) ||
+    (parsed.data.copyFolderToFolder !== undefined &&
+      parsed.data.copyFolderToFolder !== plan.copyFolderToFolder) ||
+    (parsed.data.copyBucketToBucket !== undefined &&
+      parsed.data.copyBucketToBucket !== plan.copyBucketToBucket) ||
+    (parsed.data.syncTasks !== undefined &&
+      parsed.data.syncTasks !== plan.syncTasks)
 
   if (thumbnailPolicyChanged || transferPolicyChanged) {
     const [freeUsers, subscriptionUsers] = await Promise.all([

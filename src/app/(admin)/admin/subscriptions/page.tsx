@@ -30,8 +30,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { DestructiveConfirmDialog } from "@/components/shared/destructive-confirm-dialog"
 import { toast } from "sonner"
 import { Pencil, Plus, Trash2 } from "lucide-react"
+import {
+  DESTRUCTIVE_CONFIRM_SCOPE,
+  hasDestructiveConfirmBypass,
+} from "@/lib/destructive-confirmation"
 
 interface SubscriptionRow {
   id: string
@@ -289,6 +294,7 @@ export default function AdminSubscriptionsPage() {
   const [page, setPage] = useState(1)
   const [createOpen, setCreateOpen] = useState(false)
   const [editSubscription, setEditSubscription] = useState<SubscriptionRow | null>(null)
+  const [pendingDeleteSubscription, setPendingDeleteSubscription] = useState<SubscriptionRow | null>(null)
 
   const { data, isLoading } = useQuery<{
     subscriptions: SubscriptionRow[]
@@ -464,15 +470,12 @@ export default function AdminSubscriptionsPage() {
                           variant="ghost"
                           size="sm"
                           onClick={() => {
-                            if (
-                              confirm(
-                                sub.status === "canceled"
-                                  ? `Clean up canceled subscription for ${sub.user.email}? This removes the local record.`
-                                  : `Delete subscription for ${sub.user.email}? This cancels billing immediately and removes the local record.`
-                              )
-                            ) {
+                            if (hasDestructiveConfirmBypass(DESTRUCTIVE_CONFIRM_SCOPE)) {
                               deleteMutation.mutate(sub.id)
+                              return
                             }
+
+                            setPendingDeleteSubscription(sub)
                           }}
                           disabled={deleteMutation.isPending}
                         >
@@ -521,6 +524,31 @@ export default function AdminSubscriptionsPage() {
           )}
         </>
       )}
+
+      <DestructiveConfirmDialog
+        open={Boolean(pendingDeleteSubscription)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingDeleteSubscription(null)
+          }
+        }}
+        title="Confirm subscription deletion"
+        description={
+          pendingDeleteSubscription
+            ? pendingDeleteSubscription.status === "canceled"
+              ? `Clean up canceled subscription for ${pendingDeleteSubscription.user.email}? This removes the local record.`
+              : `Delete subscription for ${pendingDeleteSubscription.user.email}? This cancels billing immediately and removes the local record.`
+            : "Delete subscription?"
+        }
+        actionLabel="Delete Subscription"
+        onConfirm={async () => {
+          if (!pendingDeleteSubscription) {
+            throw new Error("Missing subscription context")
+          }
+          await deleteMutation.mutateAsync(pendingDeleteSubscription.id)
+          setPendingDeleteSubscription(null)
+        }}
+      />
     </div>
   )
 }

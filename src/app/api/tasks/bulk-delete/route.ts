@@ -6,6 +6,7 @@ import {
   buildFileSearchSqlWhereClause,
   parseScopes,
 } from "@/lib/file-search"
+import { getUserPlanEntitlements } from "@/lib/plan-entitlements"
 
 interface BulkDeletePayload {
   query: string
@@ -23,6 +24,20 @@ export async function POST(request: NextRequest) {
     const session = await auth()
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const entitlements = await getUserPlanEntitlements(session.user.id)
+    if (!entitlements?.searchAllFiles) {
+      return NextResponse.json(
+        {
+          error: "Bulk delete via search is disabled for the current plan",
+          details: {
+            plan: entitlements?.slug ?? "free",
+            planSource: entitlements?.source ?? "default",
+          },
+        },
+        { status: 403 }
+      )
     }
 
     const body = (await request.json()) as BulkDeletePayload

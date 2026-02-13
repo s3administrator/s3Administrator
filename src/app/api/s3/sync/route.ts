@@ -4,6 +4,7 @@ import { getS3Client } from "@/lib/s3"
 import { prisma } from "@/lib/db"
 import { getObjectExtension, rebuildUserExtensionStats } from "@/lib/file-stats"
 import { getUserPlanEntitlements } from "@/lib/plan-entitlements"
+import { getBucketLimitViolation } from "@/lib/plan-limits"
 import { getRequestContext, logUserAuditAction } from "@/lib/audit-logger"
 import { ListObjectsV2Command } from "@aws-sdk/client-s3"
 
@@ -31,16 +32,37 @@ export async function POST(request: NextRequest) {
     }
 
     const entitlements = await getUserPlanEntitlements(session.user.id)
-    const fileLimit = entitlements?.fileLimit ?? Number.POSITIVE_INFINITY
+    if (!entitlements) {
+      return NextResponse.json({ error: "Failed to resolve plan entitlements" }, { status: 403 })
+    }
+    const fileLimit = entitlements.fileLimit
 
     const { client, credential } = await getS3Client(session.user.id, credentialId)
+    const bucketLimitViolation = await getBucketLimitViolation({
+      userId: session.user.id,
+      credentialId: credential.id,
+      bucket,
+      entitlements,
+    })
+    if (bucketLimitViolation) {
+      return NextResponse.json(
+        {
+          error: "Bucket limit reached for current plan",
+          details: bucketLimitViolation,
+        },
+        { status: 400 }
+      )
+    }
 
     // Count files in other buckets (to know how many slots are left for this bucket)
     const otherBucketCount = await prisma.fileMetadata.count({
       where: {
         userId: session.user.id,
-        credentialId: credential.id,
-        bucket: { not: bucket },
+        isFolder: false,
+        NOT: {
+          credentialId: credential.id,
+          bucket,
+        },
       },
     })
 
@@ -87,11 +109,42 @@ export async function POST(request: NextRequest) {
     } while (continuationToken)
 
     const totalInS3 = s3Objects.length
+    const totalFileObjectsInS3 = s3Objects.filter((obj) => !obj.isFolder).length
+    const cachedEntries = await prisma.fileMetadata.findMany({
+      where: {
+        userId: session.user.id,
+        credentialId: credential.id,
+        bucket,
+      },
+      select: {
+        id: true,
+        key: true,
+        isFolder: true,
+      },
+    })
+    const cachedFileKeys = new Set(
+      cachedEntries.filter((entry) => !entry.isFolder).map((entry) => entry.key)
+    )
 
     // Limit entries to tier allowance
-    const objectsToSync = Number.isFinite(availableSlots)
-      ? s3Objects.slice(0, availableSlots)
-      : s3Objects
+    const objectsToSync: typeof s3Objects = []
+    let remainingSlots = availableSlots
+    for (const object of s3Objects) {
+      if (object.isFolder) {
+        objectsToSync.push(object)
+        continue
+      }
+
+      const alreadyCached = cachedFileKeys.has(object.key)
+      if (alreadyCached || !Number.isFinite(remainingSlots) || remainingSlots > 0) {
+        objectsToSync.push(object)
+        if (!alreadyCached && Number.isFinite(remainingSlots)) {
+          remainingSlots--
+        }
+      }
+    }
+    const syncedFileObjects = objectsToSync.filter((obj) => !obj.isFolder).length
+    const skippedDueToFileLimit = Math.max(0, totalFileObjectsInS3 - syncedFileObjects)
 
     // Upsert entries into FileMetadata
     let synced = 0
@@ -126,15 +179,6 @@ export async function POST(request: NextRequest) {
 
     // Delete FileMetadata entries for objects no longer in S3
     const s3KeySet = new Set(s3Objects.map((o) => o.key))
-    const cachedEntries = await prisma.fileMetadata.findMany({
-      where: {
-        userId: session.user.id,
-        credentialId: credential.id,
-        bucket,
-      },
-      select: { id: true, key: true },
-    })
-
     const staleIds = cachedEntries
       .filter((entry) => !s3KeySet.has(entry.key))
       .map((entry) => entry.id)
@@ -159,12 +203,13 @@ export async function POST(request: NextRequest) {
         credentialId: credential.id,
         synced,
         totalInS3,
+        skippedDueToFileLimit,
         staleRemoved: staleIds.length,
       },
       ...requestContext,
     })
 
-    return NextResponse.json({ synced, total: totalInS3 })
+    return NextResponse.json({ synced, total: totalInS3, skippedDueToFileLimit })
   } catch (error) {
     console.error("Failed to sync metadata:", error)
     if (userId) {

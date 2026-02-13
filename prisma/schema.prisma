@@ -211,18 +211,25 @@ model BackgroundTask {
 }
 
 model Plan {
-  id            String   @id @default(cuid())
-  slug          String   @unique
-  name          String
-  priceMonthly  Int      @default(0)
-  stripePriceId String?  @unique
-  bucketLimit   Int      @default(1)
-  fileLimit     Int      @default(1000)
-  features      String[] @default([])
-  thumbnailCache Boolean @default(false)
-  transferTasks Boolean @default(false)
-  isActive      Boolean  @default(true)
-  sortOrder     Int      @default(0)
+  id                 String   @id @default(cuid())
+  slug               String   @unique
+  name               String
+  priceMonthly       Int      @default(0)
+  stripePriceId      String?  @unique
+  bucketLimit        Int      @default(1)
+  fileLimit          Int      @default(1000)
+  features           String[] @default([])
+  thumbnailCache     Boolean  @default(false)
+  transferTasks      Boolean  @default(false)
+  recursiveDelete    Boolean  @default(false)
+  multipleUpload     Boolean  @default(false)
+  copyFolderToFolder Boolean  @default(false)
+  copyBucketToBucket Boolean  @default(false)
+  auditLogs          Boolean  @default(false)
+  searchAllFiles     Boolean  @default(false)
+  syncTasks          Boolean  @default(false)
+  isActive           Boolean  @default(true)
+  sortOrder          Int      @default(0)
 
   subscriptions Subscription[]
 

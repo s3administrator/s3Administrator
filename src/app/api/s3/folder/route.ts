@@ -3,8 +3,9 @@ import { auth } from "@/lib/auth"
 import { getS3Client } from "@/lib/s3"
 import { prisma } from "@/lib/db"
 import { rebuildUserExtensionStats } from "@/lib/file-stats"
+import { getUserPlanEntitlements } from "@/lib/plan-entitlements"
+import { getBucketLimitViolation } from "@/lib/plan-limits"
 import { createFolderSchema } from "@/lib/validations"
-import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
 import { getRequestContext, logUserAuditAction } from "@/lib/audit-logger"
 import { PutObjectCommand } from "@aws-sdk/client-s3"
 
@@ -34,6 +35,27 @@ export async function POST(request: NextRequest) {
     const { bucket, credentialId, key } = parsed.data
     auditBucket = bucket
     const { client, credential } = await getS3Client(session.user.id, credentialId)
+
+    const entitlements = await getUserPlanEntitlements(session.user.id)
+    if (!entitlements) {
+      return NextResponse.json({ error: "Failed to resolve plan entitlements" }, { status: 403 })
+    }
+
+    const bucketLimitViolation = await getBucketLimitViolation({
+      userId: session.user.id,
+      credentialId: credential.id,
+      bucket,
+      entitlements,
+    })
+    if (bucketLimitViolation) {
+      return NextResponse.json(
+        {
+          error: "Bucket limit reached for current plan",
+          details: bucketLimitViolation,
+        },
+        { status: 400 }
+      )
+    }
 
     // Ensure key ends with /
     const folderKey = key.endsWith("/") ? key : `${key}/`

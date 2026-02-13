@@ -8,6 +8,13 @@ type PlanSnapshot = {
   fileLimit: number
   thumbnailCache: boolean
   transferTasks: boolean
+  recursiveDelete: boolean
+  multipleUpload: boolean
+  copyFolderToFolder: boolean
+  copyBucketToBucket: boolean
+  auditLogs: boolean
+  searchAllFiles: boolean
+  syncTasks: boolean
 }
 
 export type PlanSource = "subscription" | "default"
@@ -19,20 +26,47 @@ export interface PlanEntitlements {
   fileLimit: number
   thumbnailCache: boolean
   transferTasks: boolean
+  recursiveDelete: boolean
+  multipleUpload: boolean
+  copyFolderToFolder: boolean
+  copyBucketToBucket: boolean
+  auditLogs: boolean
+  searchAllFiles: boolean
+  syncTasks: boolean
 }
 
-function normalizeLimit(limit: number): number {
+const MAX_BUCKET_LIMIT = 1000
+
+function normalizeFileLimit(limit: number): number {
   return limit <= 0 ? Number.POSITIVE_INFINITY : limit
 }
 
+function normalizeBucketLimit(limit: number): number {
+  if (limit <= 0) return MAX_BUCKET_LIMIT
+  return Math.min(MAX_BUCKET_LIMIT, limit)
+}
+
 function buildEntitlements(plan: PlanSnapshot, source: PlanSource): PlanEntitlements {
+  const transferTasks =
+    plan.transferTasks ||
+    plan.copyFolderToFolder ||
+    plan.copyBucketToBucket ||
+    plan.syncTasks
+
   return {
     slug: plan.slug,
     source,
-    bucketLimit: normalizeLimit(plan.bucketLimit),
-    fileLimit: normalizeLimit(plan.fileLimit),
+    bucketLimit: normalizeBucketLimit(plan.bucketLimit),
+    fileLimit: normalizeFileLimit(plan.fileLimit),
     thumbnailCache: plan.thumbnailCache,
-    transferTasks: plan.transferTasks,
+    transferTasks,
+    recursiveDelete: plan.recursiveDelete,
+    multipleUpload: plan.multipleUpload,
+    copyFolderToFolder: plan.copyFolderToFolder,
+    copyBucketToBucket: plan.copyBucketToBucket,
+    auditLogs: plan.auditLogs,
+    searchAllFiles: plan.searchAllFiles,
+    syncTasks: plan.syncTasks,
   }
 }
 
@@ -46,6 +80,13 @@ async function findPlanBySlug(slug: string): Promise<PlanSnapshot | null> {
     fileLimit: true,
     thumbnailCache: true,
     transferTasks: true,
+    recursiveDelete: true,
+    multipleUpload: true,
+    copyFolderToFolder: true,
+    copyBucketToBucket: true,
+    auditLogs: true,
+    searchAllFiles: true,
+    syncTasks: true,
   } as const
 
   const exact = await prisma.plan.findUnique({
@@ -85,6 +126,13 @@ export async function getUserPlanEntitlements(userId: string): Promise<PlanEntit
               fileLimit: true,
               thumbnailCache: true,
               transferTasks: true,
+              recursiveDelete: true,
+              multipleUpload: true,
+              copyFolderToFolder: true,
+              copyBucketToBucket: true,
+              auditLogs: true,
+              searchAllFiles: true,
+              syncTasks: true,
             },
           },
         },
@@ -109,9 +157,16 @@ export async function getUserPlanEntitlements(userId: string): Promise<PlanEntit
   return {
     slug: "free",
     source: "default",
-    bucketLimit: TIER_LIMITS.free.buckets,
-    fileLimit: TIER_LIMITS.free.files,
+    bucketLimit: normalizeBucketLimit(TIER_LIMITS.free.buckets),
+    fileLimit: normalizeFileLimit(TIER_LIMITS.free.files),
     thumbnailCache: false,
     transferTasks: false,
+    recursiveDelete: true,
+    multipleUpload: true,
+    copyFolderToFolder: false,
+    copyBucketToBucket: false,
+    auditLogs: false,
+    searchAllFiles: false,
+    syncTasks: false,
   }
 }

@@ -19,6 +19,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { DestructiveConfirmDialog } from "@/components/shared/destructive-confirm-dialog"
 import {
   Select,
   SelectContent,
@@ -30,6 +31,10 @@ import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 import { Plus, Trash2, Check, Loader2, Star } from "lucide-react"
 import { PROVIDERS, Provider, getProviderConfig } from "@/lib/providers"
+import {
+  DESTRUCTIVE_CONFIRM_SCOPE,
+  hasDestructiveConfirmBypass,
+} from "@/lib/destructive-confirmation"
 
 interface Credential {
   id: string
@@ -54,6 +59,7 @@ export default function SettingsPage() {
     secretKey: "",
   })
   const [testing, setTesting] = useState<string | null>(null)
+  const [pendingDeleteCredential, setPendingDeleteCredential] = useState<Credential | null>(null)
 
   const { data: credentials, isLoading } = useQuery<Credential[]>({
     queryKey: ["credentials"],
@@ -348,7 +354,13 @@ export default function SettingsPage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => deleteMutation.mutate(cred.id)}
+                      onClick={() => {
+                        if (hasDestructiveConfirmBypass(DESTRUCTIVE_CONFIRM_SCOPE)) {
+                          deleteMutation.mutate(cred.id)
+                          return
+                        }
+                        setPendingDeleteCredential(cred)
+                      }}
                     >
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
@@ -370,6 +382,29 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       )}
+
+      <DestructiveConfirmDialog
+        open={Boolean(pendingDeleteCredential)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingDeleteCredential(null)
+          }
+        }}
+        title="Confirm credential deletion"
+        description={
+          pendingDeleteCredential
+            ? `Delete credential \"${pendingDeleteCredential.label}\"?`
+            : "Delete credential?"
+        }
+        actionLabel="Delete Credential"
+        onConfirm={async () => {
+          if (!pendingDeleteCredential) {
+            throw new Error("Missing credential context")
+          }
+          await deleteMutation.mutateAsync(pendingDeleteCredential.id)
+          setPendingDeleteCredential(null)
+        }}
+      />
     </div>
   )
 }

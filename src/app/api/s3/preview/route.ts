@@ -3,6 +3,7 @@ import { GetObjectCommand } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 import { auth } from "@/lib/auth"
 import { getS3Client } from "@/lib/s3"
+import { getUserPlanEntitlements } from "@/lib/plan-entitlements"
 import { previewSchema } from "@/lib/validations"
 import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
 import { getThumbnailUrlTtlSeconds } from "@/lib/thumbnail-storage"
@@ -24,6 +25,20 @@ export async function POST(request: NextRequest) {
     const limitResult = rateLimitByUser(session.user.id, "s3-preview", 120, 60_000)
     if (!limitResult.success) {
       return rateLimitResponse(limitResult.retryAfterSeconds)
+    }
+
+    const entitlements = await getUserPlanEntitlements(session.user.id)
+    if (!entitlements?.thumbnailCache) {
+      return NextResponse.json(
+        {
+          error: "Preview thumbnails are disabled for the current plan",
+          details: {
+            plan: entitlements?.slug ?? "free",
+            planSource: entitlements?.source ?? "default",
+          },
+        },
+        { status: 403 }
+      )
     }
 
     const body = await request.json()

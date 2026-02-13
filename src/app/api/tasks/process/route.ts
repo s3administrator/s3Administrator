@@ -15,6 +15,7 @@ import { rebuildUserExtensionStats } from "@/lib/file-stats"
 import { buildFileSearchSqlWhereClause, parseScopes } from "@/lib/file-search"
 import { getMediaTypeFromExtension } from "@/lib/media"
 import { getUserPlanEntitlements } from "@/lib/plan-entitlements"
+import { getBucketLimitViolation } from "@/lib/plan-limits"
 import { generateVideoThumbnail } from "@/lib/thumbnail-worker"
 import {
   buildThumbnailObjectKey,
@@ -84,6 +85,43 @@ interface ObjectTransferTaskProgress {
   failed: number
   remaining: number
   cursorKey: string | null
+}
+
+function getTransferOperationDisabledMessage(
+  scope: TransferScope,
+  operation: TransferOperation
+): string {
+  if (operation === "sync") {
+    return "Sync tasks are disabled for the current plan"
+  }
+  if (scope === "folder" && (operation === "copy" || operation === "move")) {
+    return "Folder transfer tasks are disabled for the current plan"
+  }
+  if (scope === "bucket" && (operation === "copy" || operation === "migrate")) {
+    return "Bucket transfer tasks are disabled for the current plan"
+  }
+  return "Transfer operation is disabled for the current plan"
+}
+
+function isTransferOperationEnabledByPlan(
+  entitlements: {
+    syncTasks: boolean
+    copyFolderToFolder: boolean
+    copyBucketToBucket: boolean
+  },
+  scope: TransferScope,
+  operation: TransferOperation
+): boolean {
+  if (operation === "sync") {
+    return entitlements.syncTasks
+  }
+  if (scope === "folder" && (operation === "copy" || operation === "move")) {
+    return entitlements.copyFolderToFolder
+  }
+  if (scope === "bucket" && (operation === "copy" || operation === "migrate")) {
+    return entitlements.copyBucketToBucket
+  }
+  return false
 }
 
 function parsePayload(raw: unknown): BulkDeleteTaskPayload | null {
@@ -405,6 +443,114 @@ async function deleteKeysFromBucket(
   }
 
   return deletedKeys
+}
+
+interface SyncDestinationDriftRow {
+  key: string
+}
+
+async function findSyncDestinationDriftBatch(params: {
+  userId: string
+  payload: ObjectTransferTaskPayload
+}): Promise<SyncDestinationDriftRow[]> {
+  const { userId, payload } = params
+
+  if (payload.scope === "bucket") {
+    return prisma.$queryRaw<SyncDestinationDriftRow[]>(Prisma.sql`
+      SELECT d."key"
+      FROM "FileMetadata" d
+      WHERE d."userId" = ${userId}
+        AND d."credentialId" = ${payload.destinationCredentialId}
+        AND d."bucket" = ${payload.destinationBucket}
+        AND d."isFolder" = false
+        AND NOT EXISTS (
+          SELECT 1
+          FROM "FileMetadata" s
+          WHERE s."userId" = ${userId}
+            AND s."credentialId" = ${payload.sourceCredentialId}
+            AND s."bucket" = ${payload.sourceBucket}
+            AND s."isFolder" = false
+            AND s."key" = d."key"
+        )
+      ORDER BY d."key" ASC
+      LIMIT ${TRANSFER_CHUNK_SIZE}
+    `)
+  }
+
+  const sourcePrefix = payload.sourcePrefix ?? ""
+  const destinationPrefix = payload.destinationPrefix ?? ""
+  const destinationPrefixLength = destinationPrefix.length
+  const substringStart = destinationPrefixLength + 1
+
+  return prisma.$queryRaw<SyncDestinationDriftRow[]>(Prisma.sql`
+    SELECT d."key"
+    FROM "FileMetadata" d
+    WHERE d."userId" = ${userId}
+      AND d."credentialId" = ${payload.destinationCredentialId}
+      AND d."bucket" = ${payload.destinationBucket}
+      AND d."isFolder" = false
+      AND LEFT(d."key", ${destinationPrefixLength}) = ${destinationPrefix}
+      AND NOT EXISTS (
+        SELECT 1
+        FROM "FileMetadata" s
+        WHERE s."userId" = ${userId}
+          AND s."credentialId" = ${payload.sourceCredentialId}
+          AND s."bucket" = ${payload.sourceBucket}
+          AND s."isFolder" = false
+          AND s."key" = ${sourcePrefix} || substring(d."key" from ${substringStart})
+      )
+    ORDER BY d."key" ASC
+    LIMIT ${TRANSFER_CHUNK_SIZE}
+  `)
+}
+
+async function cleanupSyncDestinationDrift(params: {
+  userId: string
+  payload: ObjectTransferTaskPayload
+  destinationClient: S3Client
+}): Promise<{ deleted: number; failed: number }> {
+  const { userId, payload, destinationClient } = params
+  let deleted = 0
+  let failed = 0
+
+  while (true) {
+    const driftRows = await findSyncDestinationDriftBatch({ userId, payload })
+    if (driftRows.length === 0) {
+      break
+    }
+
+    const driftKeys = driftRows.map((row) => row.key)
+    const deletedKeys = await deleteKeysFromBucket(
+      destinationClient,
+      payload.destinationBucket,
+      driftKeys
+    )
+    if (deletedKeys.size === 0) {
+      failed += driftKeys.length
+      break
+    }
+
+    const deletedKeyList = Array.from(deletedKeys)
+    await prisma.fileMetadata.deleteMany({
+      where: {
+        userId,
+        credentialId: payload.destinationCredentialId,
+        bucket: payload.destinationBucket,
+        key: { in: deletedKeyList },
+      },
+    })
+    await deleteMediaThumbnailsForKeys({
+      userId,
+      credentialId: payload.destinationCredentialId,
+      bucket: payload.destinationBucket,
+      keys: deletedKeyList,
+    })
+
+    deleted += deletedKeyList.length
+    failed += Math.max(0, driftKeys.length - deletedKeys.size)
+  }
+
+  return { deleted, failed }
 }
 
 export async function POST() {
@@ -792,7 +938,7 @@ export async function POST() {
       }
 
       const entitlements = await getUserPlanEntitlements(session.user.id)
-      if (!entitlements?.transferTasks) {
+      if (!entitlements || !entitlements.transferTasks) {
         await prisma.backgroundTask.update({
           where: { id: candidate.id },
           data: {
@@ -811,6 +957,70 @@ export async function POST() {
           type: "object_transfer",
           skipped: "transfer_disabled_for_plan",
         })
+      }
+
+      if (
+        !isTransferOperationEnabledByPlan(
+          entitlements,
+          transferPayload.scope,
+          transferPayload.operation
+        )
+      ) {
+        const message = getTransferOperationDisabledMessage(
+          transferPayload.scope,
+          transferPayload.operation
+        )
+        await prisma.backgroundTask.update({
+          where: { id: candidate.id },
+          data: {
+            status: "failed",
+            attempts: candidate.attempts + 1,
+            completedAt: new Date(),
+            nextRunAt: new Date(),
+            lastError: message,
+          },
+        })
+
+        return NextResponse.json({
+          processed: true,
+          taskId: candidate.id,
+          done: true,
+          type: "object_transfer",
+          skipped: "operation_disabled_for_plan",
+        })
+      }
+
+      const destinationContextChanged =
+        transferPayload.sourceCredentialId !== transferPayload.destinationCredentialId ||
+        transferPayload.sourceBucket !== transferPayload.destinationBucket
+      if (destinationContextChanged) {
+        const bucketLimitViolation = await getBucketLimitViolation({
+          userId: session.user.id,
+          credentialId: transferPayload.destinationCredentialId,
+          bucket: transferPayload.destinationBucket,
+          entitlements,
+        })
+        if (bucketLimitViolation) {
+          await prisma.backgroundTask.update({
+            where: { id: candidate.id },
+            data: {
+              status: "failed",
+              attempts: candidate.attempts + 1,
+              completedAt: new Date(),
+              nextRunAt: new Date(),
+              lastError: "Bucket limit reached for current plan",
+            },
+          })
+
+          return NextResponse.json({
+            processed: true,
+            taskId: candidate.id,
+            done: true,
+            type: "object_transfer",
+            skipped: "bucket_limit_reached",
+            details: bucketLimitViolation,
+          })
+        }
       }
 
       const progress = parseObjectTransferProgress(candidate.progress)
@@ -843,9 +1053,35 @@ export async function POST() {
 
       if (sourceBatch.length === 0) {
         const total = progress.total > 0 ? progress.total : progress.processed
+        let syncCleanupDeleted = 0
+        let syncCleanupFailed = 0
+
+        if (transferPayload.operation === "sync") {
+          const { client: destinationClient } = await getS3Client(
+            session.user.id,
+            transferPayload.destinationCredentialId
+          )
+          const cleanupResult = await cleanupSyncDestinationDrift({
+            userId: session.user.id,
+            payload: transferPayload,
+            destinationClient,
+          })
+          syncCleanupDeleted = cleanupResult.deleted
+          syncCleanupFailed = cleanupResult.failed
+        }
+
         await rebuildUserExtensionStats(session.user.id)
 
         if (transferPayload.operation === "sync") {
+          const cycleProgress = {
+            total,
+            processed: progress.processed,
+            copied: progress.copied,
+            moved: progress.moved,
+            deleted: progress.deleted + syncCleanupDeleted,
+            skipped: progress.skipped,
+            failed: progress.failed + syncCleanupFailed,
+          }
           const nextRunAt = new Date(Date.now() + getSyncPollIntervalMs(transferPayload))
           await prisma.backgroundTask.update({
             where: { id: candidate.id },
@@ -888,15 +1124,9 @@ export async function POST() {
               destinationPrefix: transferPayload.destinationPrefix,
               nextRunAt: nextRunAt.toISOString(),
               intervalSeconds: getSyncPollIntervalMs(transferPayload) / 1000,
-              progress: {
-                total,
-                processed: progress.processed,
-                copied: progress.copied,
-                moved: progress.moved,
-                deleted: progress.deleted,
-                skipped: progress.skipped,
-                failed: progress.failed,
-              },
+              progress: cycleProgress,
+              cleanupDeleted: syncCleanupDeleted,
+              cleanupFailed: syncCleanupFailed,
             },
           })
 
@@ -907,6 +1137,8 @@ export async function POST() {
             type: "object_transfer",
             recurring: true,
             nextRunAt: nextRunAt.toISOString(),
+            deletedInCleanup: syncCleanupDeleted,
+            failedInCleanup: syncCleanupFailed,
           })
         }
 
@@ -1184,6 +1416,27 @@ export async function POST() {
         },
       })
       return NextResponse.json({ processed: false, message: "Invalid task payload" })
+    }
+
+    const searchEntitlements = await getUserPlanEntitlements(session.user.id)
+    if (!searchEntitlements?.searchAllFiles) {
+      await prisma.backgroundTask.update({
+        where: { id: candidate.id },
+        data: {
+          status: "failed",
+          attempts: candidate.attempts + 1,
+          lastError: "Bulk delete via search is disabled for the current plan",
+          completedAt: new Date(),
+          nextRunAt: new Date(),
+        },
+      })
+      return NextResponse.json({
+        processed: true,
+        taskId: candidate.id,
+        done: true,
+        type: "bulk_delete",
+        skipped: "search_disabled_for_plan",
+      })
     }
 
     const whereClause = buildFileSearchSqlWhereClause({

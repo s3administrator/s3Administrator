@@ -88,6 +88,13 @@ function formatLimit(n: number): string {
   return n.toLocaleString()
 }
 
+function formatBucketLimit(plan: Pick<PlanData, "slug" | "bucketLimit">): string {
+  if ((plan.slug === "pro" || plan.slug === "enterprise") && plan.bucketLimit >= 1000) {
+    return "Unlimited"
+  }
+  return formatLimit(plan.bucketLimit)
+}
+
 function formatDate(value: string | null | undefined): string {
   if (!value) return "N/A"
   return new Date(value).toLocaleDateString("en-US", {
@@ -447,7 +454,7 @@ export default function BillingPage() {
                   <ul className="space-y-1.5">
                     <li className="flex items-center gap-2 text-sm">
                       <Check className="h-3.5 w-3.5 text-primary" />
-                      {formatLimit(plan.bucketLimit)} bucket{plan.bucketLimit !== 1 ? "s" : ""}
+                      {formatBucketLimit(plan)} bucket{plan.bucketLimit !== 1 ? "s" : ""}
                     </li>
                     <li className="flex items-center gap-2 text-sm">
                       <Check className="h-3.5 w-3.5 text-primary" />

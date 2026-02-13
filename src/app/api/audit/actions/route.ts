@@ -92,6 +92,19 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
+  if (!entitlements?.auditLogs) {
+    return NextResponse.json(
+      {
+        error: "Audit logs are disabled for the current plan",
+        details: {
+          plan: entitlements?.slug ?? "free",
+          planSource: entitlements?.source ?? "default",
+        },
+      },
+      { status: 403 }
+    )
+  }
+
   const tier = entitlements?.slug ?? "free"
   const retentionDays = getAuditRetentionDays(tier)
   const retentionCutoff = getAuditCutoffDate(retentionDays)

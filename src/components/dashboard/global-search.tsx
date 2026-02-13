@@ -20,6 +20,11 @@ import { FileBrowser } from "@/components/dashboard/file-browser"
 import { MultiSelectToolbar } from "@/components/dashboard/multi-select-toolbar"
 import { DeleteConfirmDialog } from "@/components/dashboard/delete-confirm-dialog"
 import { RenameDialog } from "@/components/dashboard/rename-dialog"
+import { DestructiveConfirmDialog } from "@/components/shared/destructive-confirm-dialog"
+import {
+  DESTRUCTIVE_CONFIRM_SCOPE,
+  hasDestructiveConfirmBypass,
+} from "@/lib/destructive-confirmation"
 import type { S3Object } from "@/types"
 
 interface SearchResult {
@@ -98,6 +103,7 @@ export function GlobalSearch() {
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
   const [allMatchingSelected, setAllMatchingSelected] = useState(false)
   const [isBulkRunning, setIsBulkRunning] = useState(false)
+  const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false)
 
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleteItems, setDeleteItems] = useState<SearchItem[]>([])
@@ -357,31 +363,31 @@ export function GlobalSearch() {
 
   const handleBulkDelete = async () => {
     if (allMatchingSelected) {
-      const confirmed = window.confirm(
-        `Start a background task to delete all ${totalResults} matching indexed files?`
-      )
-      if (!confirmed) return
-
       try {
-        const res = await fetch("/api/tasks/bulk-delete", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            query: queryValue,
-            selectedType,
-            selectedCredentialIds,
-            selectedBucketScopes,
-          }),
-        })
+        if (hasDestructiveConfirmBypass(DESTRUCTIVE_CONFIRM_SCOPE)) {
+          const res = await fetch("/api/tasks/bulk-delete", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              query: queryValue,
+              selectedType,
+              selectedCredentialIds,
+              selectedBucketScopes,
+            }),
+          })
 
-        const data = await res.json()
-        if (!res.ok) {
-          throw new Error(data?.error ?? "Failed to create task")
+          const data = await res.json()
+          if (!res.ok) {
+            throw new Error(data?.error ?? "Failed to create task")
+          }
+
+          queryClient.invalidateQueries({ queryKey: ["background-tasks"] })
+          toast.success("Bulk delete task started")
+          resetSelection()
+          return
         }
 
-        queryClient.invalidateQueries({ queryKey: ["background-tasks"] })
-        toast.success("Bulk delete task started")
-        resetSelection()
+        setBulkDeleteConfirmOpen(true)
       } catch {
         toast.error("Failed to create bulk delete task")
       }
@@ -690,6 +696,36 @@ export function GlobalSearch() {
           }}
         />
       )}
+
+      <DestructiveConfirmDialog
+        open={bulkDeleteConfirmOpen}
+        onOpenChange={setBulkDeleteConfirmOpen}
+        title="Confirm bulk delete task"
+        description={`This will queue deletion of all ${totalResults.toLocaleString()} matching indexed files.`}
+        actionLabel="Start Delete Task"
+        onConfirm={async () => {
+          const res = await fetch("/api/tasks/bulk-delete", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              query: queryValue,
+              selectedType,
+              selectedCredentialIds,
+              selectedBucketScopes,
+            }),
+          })
+
+          const data = await res.json()
+          if (!res.ok) {
+            toast.error(data?.error ?? "Failed to create bulk delete task")
+            throw new Error("Failed to create bulk delete task")
+          }
+
+          queryClient.invalidateQueries({ queryKey: ["background-tasks"] })
+          toast.success("Bulk delete task started")
+          resetSelection()
+        }}
+      />
 
       {isBulkRunning && (
         <div className="pointer-events-none fixed bottom-4 right-4 rounded-md border bg-background px-3 py-2 text-sm shadow">
