@@ -2,7 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *, .midnight *, .graphite *));
+@custom-variant dark (&:is(.dark *, .midnight *, .graphite *, .graphite-plus *, .graphite-bright *));
 
 @theme inline {
   --color-background: var(--background);
@@ -148,6 +148,41 @@
   --sidebar-accent-foreground: oklch(0.9 0.008 80);
   --sidebar-border: oklch(1 0 0 / 16%);
   --sidebar-ring: oklch(0.72 0.06 220);
+}
+
+.graphite-plus,
+.graphite-bright {
+  --background: oklch(0.24 0.014 72);
+  --foreground: oklch(0.99 0.01 82);
+  --card: oklch(0.31 0.016 72);
+  --card-foreground: oklch(0.99 0.01 82);
+  --popover: oklch(0.31 0.016 72);
+  --popover-foreground: oklch(0.99 0.01 82);
+  --primary: oklch(0.89 0.1 74);
+  --primary-foreground: oklch(0.2 0.018 68);
+  --secondary: oklch(0.38 0.017 72);
+  --secondary-foreground: oklch(0.985 0.01 82);
+  --muted: oklch(0.34 0.015 72);
+  --muted-foreground: oklch(0.86 0.01 82);
+  --accent: oklch(0.44 0.03 70);
+  --accent-foreground: oklch(0.99 0.01 82);
+  --destructive: oklch(0.74 0.21 28);
+  --border: oklch(1 0 0 / 38%);
+  --input: oklch(1 0 0 / 44%);
+  --ring: oklch(0.9 0.095 74);
+  --chart-1: oklch(0.88 0.12 74);
+  --chart-2: oklch(0.86 0.11 52);
+  --chart-3: oklch(0.84 0.11 32);
+  --chart-4: oklch(0.9 0.1 95);
+  --chart-5: oklch(0.82 0.13 20);
+  --sidebar: oklch(0.21 0.015 72);
+  --sidebar-foreground: oklch(0.99 0.01 82);
+  --sidebar-primary: oklch(0.89 0.1 74);
+  --sidebar-primary-foreground: oklch(0.2 0.018 68);
+  --sidebar-accent: oklch(0.36 0.02 72);
+  --sidebar-accent-foreground: oklch(0.985 0.01 82);
+  --sidebar-border: oklch(1 0 0 / 38%);
+  --sidebar-ring: oklch(0.9 0.095 74);
 }
 
 .dark {

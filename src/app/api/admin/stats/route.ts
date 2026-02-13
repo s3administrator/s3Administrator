@@ -29,7 +29,7 @@ export async function GET() {
   const [
     totalUsers,
     totalCredentials,
-    tierCounts,
+    tierCountsRaw,
     totalFiles,
     totalEvents,
     eventsLast24h,
@@ -45,7 +45,20 @@ export async function GET() {
   ] = await Promise.all([
     prisma.user.count(),
     prisma.s3Credential.count(),
-    prisma.user.groupBy({ by: ["tier"], _count: { _all: true } }),
+    prisma.$queryRaw<Array<{ tier: string; count: bigint | number }>>`
+      SELECT COALESCE(latest_plan.slug, 'free') AS "tier", COUNT(*)::bigint AS "count"
+      FROM "User" u
+      LEFT JOIN LATERAL (
+        SELECT p.slug
+        FROM "Subscription" s
+        JOIN "Plan" p ON p.id = s."planId"
+        WHERE s."userId" = u.id
+          AND s."status" IN ('active', 'trialing', 'past_due')
+        ORDER BY s."currentPeriodEnd" DESC, s."createdAt" DESC
+        LIMIT 1
+      ) latest_plan ON TRUE
+      GROUP BY 1
+    `,
     prisma.fileMetadata.count(),
     prisma.userActionEvent.count(),
     prisma.userActionEvent.count({ where: { createdAt: { gte: since24h } } }),
@@ -136,16 +149,17 @@ export async function GET() {
     apiCallsLast24h > 0
       ? Number(((apiErrorsLast24h / apiCallsLast24h) * 100).toFixed(2))
       : 0
+  const tierBreakdown = tierCountsRaw.reduce(
+    (acc, row) => ({ ...acc, [row.tier]: toNumber(row.count) }),
+    {} as Record<string, number>
+  )
 
   return NextResponse.json({
     totalUsers,
     totalCredentials,
     totalFiles,
     totalEvents,
-    tierBreakdown: tierCounts.reduce(
-      (acc, t) => ({ ...acc, [t.tier]: t._count._all }),
-      {} as Record<string, number>
-    ),
+    tierBreakdown,
     actionMetrics: {
       eventsLast24h,
       eventsLast7d,

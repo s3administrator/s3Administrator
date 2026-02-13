@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/db"
+import { ACTIVE_SUBSCRIPTION_STATUSES } from "@/lib/subscription-status"
 import { TIER_LIMITS } from "@/lib/tiers"
-
-const ACTIVE_SUBSCRIPTION_STATUSES = ["active", "trialing", "past_due"] as const
 
 type PlanSnapshot = {
   slug: string
@@ -11,7 +10,7 @@ type PlanSnapshot = {
   transferTasks: boolean
 }
 
-export type PlanSource = "subscription" | "tier" | "default"
+export type PlanSource = "subscription" | "default"
 
 export interface PlanEntitlements {
   slug: string
@@ -34,21 +33,6 @@ function buildEntitlements(plan: PlanSnapshot, source: PlanSource): PlanEntitlem
     fileLimit: normalizeLimit(plan.fileLimit),
     thumbnailCache: plan.thumbnailCache,
     transferTasks: plan.transferTasks,
-  }
-}
-
-function mergeSubscriptionPlans(plans: PlanSnapshot[]): PlanEntitlements {
-  const primary = plans[0]
-  const bucketLimit = plans.reduce((max, plan) => Math.max(max, normalizeLimit(plan.bucketLimit)), 0)
-  const fileLimit = plans.reduce((max, plan) => Math.max(max, normalizeLimit(plan.fileLimit)), 0)
-
-  return {
-    slug: primary.slug,
-    source: "subscription",
-    bucketLimit,
-    fileLimit,
-    thumbnailCache: plans.some((plan) => plan.thumbnailCache),
-    transferTasks: plans.some((plan) => plan.transferTasks),
   }
 }
 
@@ -85,7 +69,6 @@ export async function getUserPlanEntitlements(userId: string): Promise<PlanEntit
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
-      tier: true,
       subscriptions: {
         where: {
           status: {
@@ -93,6 +76,7 @@ export async function getUserPlanEntitlements(userId: string): Promise<PlanEntit
           },
         },
         orderBy: [{ currentPeriodEnd: "desc" }, { createdAt: "desc" }],
+        take: 1,
         select: {
           plan: {
             select: {
@@ -112,21 +96,18 @@ export async function getUserPlanEntitlements(userId: string): Promise<PlanEntit
     return null
   }
 
-  const activePlans = user.subscriptions
-    .map((subscription) => subscription.plan)
-    .filter((plan): plan is PlanSnapshot => Boolean(plan))
-
-  if (activePlans.length > 0) {
-    return mergeSubscriptionPlans(activePlans)
+  const activePlan = user.subscriptions[0]?.plan
+  if (activePlan) {
+    return buildEntitlements(activePlan, "subscription")
   }
 
-  const tierPlan = await findPlanBySlug(user.tier)
-  if (tierPlan) {
-    return buildEntitlements(tierPlan, "tier")
+  const freePlan = await findPlanBySlug("free")
+  if (freePlan) {
+    return buildEntitlements(freePlan, "default")
   }
 
   return {
-    slug: user.tier || "free",
+    slug: "free",
     source: "default",
     bucketLimit: TIER_LIMITS.free.buckets,
     fileLimit: TIER_LIMITS.free.files,

@@ -5,6 +5,7 @@ import { stripe } from "@/lib/stripe"
 import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
 import { enforceThumbnailCachePolicyForUser } from "@/lib/thumbnail-cache-policy"
 import { enforceObjectTransferPolicyForUser } from "@/lib/transfer-task-policy"
+import { ACTIVE_SUBSCRIPTION_STATUSES } from "@/lib/subscription-status"
 import { z } from "zod/v4"
 
 const updatePlanSchema = z.object({
@@ -96,22 +97,30 @@ export async function PATCH(
     parsed.data.transferTasks !== plan.transferTasks
 
   if (thumbnailPolicyChanged || transferPolicyChanged) {
-    const [tierUsers, subscriptionUsers] = await Promise.all([
-      prisma.user.findMany({
-        where: { tier: updated.slug },
-        select: { id: true },
-      }),
+    const [freeUsers, subscriptionUsers] = await Promise.all([
+      updated.slug === "free"
+        ? prisma.user.findMany({
+            where: {
+              subscriptions: {
+                none: {
+                  status: { in: [...ACTIVE_SUBSCRIPTION_STATUSES] },
+                },
+              },
+            },
+            select: { id: true },
+          })
+        : Promise.resolve([] as Array<{ id: string }>),
       prisma.subscription.findMany({
         where: {
           planId: updated.id,
-          status: { in: ["active", "trialing", "past_due"] },
+          status: { in: [...ACTIVE_SUBSCRIPTION_STATUSES] },
         },
         select: { userId: true },
       }),
     ])
 
     const affectedUserIds = new Set<string>()
-    for (const user of tierUsers) {
+    for (const user of freeUsers) {
       affectedUserIds.add(user.id)
     }
     for (const subscription of subscriptionUsers) {
@@ -146,7 +155,7 @@ export async function DELETE(
   const { id } = await params
 
   const activeSubscriptions = await prisma.subscription.count({
-    where: { planId: id, status: { in: ["active", "trialing", "past_due"] } },
+    where: { planId: id, status: { in: [...ACTIVE_SUBSCRIPTION_STATUSES] } },
   })
 
   if (activeSubscriptions > 0) {

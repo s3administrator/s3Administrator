@@ -20,7 +20,10 @@ export function ThemeSwitcher() {
         <Button variant="ghost" size="sm" className="h-8 w-8 px-0">
           {activeTheme === "midnight" ? (
             <Eclipse className="h-4 w-4" />
-          ) : activeTheme === "dark" || activeTheme === "graphite" ? (
+          ) : activeTheme === "dark" ||
+            activeTheme === "graphite" ||
+            activeTheme === "graphite-bright" ||
+            activeTheme === "graphite-plus" ? (
             <Moon className="h-4 w-4" />
           ) : activeTheme === "matte" ? (
             <Circle className="h-4 w-4" />
@@ -42,6 +45,10 @@ export function ThemeSwitcher() {
         <DropdownMenuItem onClick={() => setTheme("graphite")}>
           <Moon className="mr-2 h-4 w-4" />
           Graphite
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setTheme("graphite-bright")}>
+          <Moon className="mr-2 h-4 w-4" />
+          Graphite Bright
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => setTheme("midnight")}>
           <Eclipse className="mr-2 h-4 w-4" />

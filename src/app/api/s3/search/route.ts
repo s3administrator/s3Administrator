@@ -1,12 +1,29 @@
 import { NextRequest, NextResponse } from "next/server"
+import { Prisma } from "@prisma/client"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/db"
 import {
-  buildFileSearchWhereClause,
+  buildFileSearchOrderBySql,
+  buildFileSearchSqlWhereClause,
+  normalizeFileSearchSortBy,
+  normalizeFileSearchSortDir,
   parseCsvValues,
   parseScopes,
 } from "@/lib/file-search"
 import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
+
+interface SearchResultRow {
+  id: string
+  key: string
+  bucket: string
+  credentialId: string
+  size: bigint
+  lastModified: Date
+}
+
+interface CountRow {
+  total: bigint
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -15,14 +32,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const rl = rateLimitByUser(session.user.id, "s3-search", 60)
+    if (!rl.success) return rateLimitResponse(rl.retryAfterSeconds)
+
     const { searchParams } = request.nextUrl
     const query = searchParams.get("q") || ""
     const bucketsParam = searchParams.get("buckets") || ""
     const credentialIdsParam = searchParams.get("credentialIds") || ""
     const scopeParams = searchParams.getAll("scope")
     const type = searchParams.get("type") || ""
-    const sortBy = (searchParams.get("sortBy") || "name") as "name" | "size" | "lastModified"
-    const sortDir = (searchParams.get("sortDir") || "asc") as "asc" | "desc"
+    const sortBy = normalizeFileSearchSortBy(searchParams.get("sortBy"))
+    const sortDir = normalizeFileSearchSortDir(searchParams.get("sortDir"))
     const skipRaw = Number(searchParams.get("skip") || "0")
     const takeRaw = Number(searchParams.get("take") || "100")
     const skip = Number.isFinite(skipRaw) && skipRaw > 0 ? Math.floor(skipRaw) : 0
@@ -36,7 +56,7 @@ export async function GET(request: NextRequest) {
     const credentialIds = parseCsvValues(credentialIdsParam)
     const scopes = parseScopes(scopeParams)
 
-    const whereClause = buildFileSearchWhereClause({
+    const whereClause = buildFileSearchSqlWhereClause({
       userId: session.user.id,
       query,
       buckets,
@@ -44,29 +64,29 @@ export async function GET(request: NextRequest) {
       scopes,
       type,
     })
+    const orderByClause = buildFileSearchOrderBySql(sortBy, sortDir)
 
-    const total = await prisma.fileMetadata.count({ where: whereClause })
+    const [countResult] = await prisma.$queryRaw<CountRow[]>(Prisma.sql`
+      SELECT COUNT(*)::bigint AS "total"
+      FROM "FileMetadata" fm
+      WHERE ${whereClause}
+    `)
+    const total = Number(countResult?.total ?? 0)
 
-    // Query database
-    const results = await prisma.fileMetadata.findMany({
-      where: whereClause,
-      select: {
-        id: true,
-        key: true,
-        bucket: true,
-        credentialId: true,
-        size: true,
-        lastModified: true,
-      },
-      orderBy:
-        sortBy === "name"
-          ? { key: sortDir }
-          : sortBy === "size"
-            ? { size: sortDir }
-            : { lastModified: sortDir },
-      skip,
-      take,
-    })
+    const results = await prisma.$queryRaw<SearchResultRow[]>(Prisma.sql`
+      SELECT
+        fm."id",
+        fm."key",
+        fm."bucket",
+        fm."credentialId",
+        fm."size",
+        fm."lastModified"
+      FROM "FileMetadata" fm
+      WHERE ${whereClause}
+      ORDER BY ${orderByClause}
+      OFFSET ${skip}
+      LIMIT ${take}
+    `)
 
     // Map response
     const data = results.map((r) => ({

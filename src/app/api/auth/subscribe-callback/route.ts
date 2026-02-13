@@ -3,92 +3,173 @@ import { stripe } from "@/lib/stripe"
 import { prisma } from "@/lib/db"
 import { enforceThumbnailCachePolicyForUser } from "@/lib/thumbnail-cache-policy"
 import { randomUUID, randomBytes } from "crypto"
+import { ACTIVE_SUBSCRIPTION_STATUSES } from "@/lib/subscription-status"
+
+function getSafeRedirectPath(path: string | null, fallback: string): string {
+  if (!path || !path.startsWith("/") || path.startsWith("//")) {
+    return fallback
+  }
+  return path
+}
+
+function redirectWithError(req: NextRequest, path: string, error: string) {
+  const target = new URL(path, req.url)
+  target.searchParams.set("error", error)
+  return NextResponse.redirect(target)
+}
+
+function getPeriodDates(sub: Awaited<ReturnType<typeof stripe.subscriptions.retrieve>>) {
+  const item = sub.items.data[0]
+  return {
+    start: new Date((item?.current_period_start ?? 0) * 1000),
+    end: new Date((item?.current_period_end ?? 0) * 1000),
+  }
+}
 
 export async function GET(req: NextRequest) {
+  const successPath = getSafeRedirectPath(
+    req.nextUrl.searchParams.get("next"),
+    "/dashboard",
+  )
+  const errorPath = getSafeRedirectPath(
+    req.nextUrl.searchParams.get("next"),
+    "/pricing",
+  )
+
   const sessionId = req.nextUrl.searchParams.get("session_id")
   if (!sessionId) {
-    return NextResponse.redirect(new URL("/pricing?error=missing_session", req.url))
+    return redirectWithError(req, errorPath, "missing_session")
   }
 
   let stripeSession
   try {
     stripeSession = await stripe.checkout.sessions.retrieve(sessionId)
   } catch {
-    return NextResponse.redirect(new URL("/pricing?error=invalid_session", req.url))
+    return redirectWithError(req, errorPath, "invalid_session")
   }
 
-  if (stripeSession.payment_status !== "paid") {
-    return NextResponse.redirect(new URL("/pricing?error=unpaid", req.url))
+  if (!["paid", "no_payment_required"].includes(stripeSession.payment_status)) {
+    return redirectWithError(req, errorPath, "unpaid")
   }
 
-  const customerEmail = stripeSession.customer_details?.email
-  const stripeCustomerId = stripeSession.customer as string
-  const stripeSubId = stripeSession.subscription as string
+  const userId = stripeSession.metadata?.userId
   const planId = stripeSession.metadata?.planId
-  const tier = stripeSession.metadata?.tier
+  const customerEmail = stripeSession.customer_details?.email ?? stripeSession.customer_email
+  const stripeCustomerId =
+    typeof stripeSession.customer === "string"
+      ? stripeSession.customer
+      : stripeSession.customer?.id ?? null
+  const stripeSubId =
+    typeof stripeSession.subscription === "string"
+      ? stripeSession.subscription
+      : stripeSession.subscription?.id ?? null
 
-  if (!customerEmail) {
-    return NextResponse.redirect(new URL("/pricing?error=no_email", req.url))
+  if (!stripeSubId) {
+    return redirectWithError(req, errorPath, "missing_subscription")
   }
 
-  // Find or create user — the webhook may or may not have run yet
-  let user = await prisma.user.findUnique({
-    where: { email: customerEmail },
-  })
+  const stripeSub = await stripe.subscriptions.retrieve(stripeSubId)
+  const stripePriceId = stripeSub.items.data[0]?.price?.id
+  const resolvedPlan =
+    (planId ? await prisma.plan.findUnique({ where: { id: planId } }) : null) ??
+    (stripePriceId
+      ? await prisma.plan.findUnique({ where: { stripePriceId } })
+      : null)
 
-  if (!user) {
+  if (!resolvedPlan) {
+    return redirectWithError(req, errorPath, "invalid_plan")
+  }
+
+  // Find or create user — prefer metadata.userId for authenticated checkout,
+  // then fall back to email for guest checkout.
+  let user = userId
+    ? await prisma.user.findUnique({
+        where: { id: userId },
+      })
+    : null
+
+  if (!user && customerEmail) {
+    user = await prisma.user.findUnique({
+      where: { email: customerEmail },
+    })
+  }
+
+  if (!user && !customerEmail) {
+    return redirectWithError(req, errorPath, "no_user")
+  }
+
+  if (!user && customerEmail) {
     try {
       user = await prisma.user.create({
         data: {
           email: customerEmail,
           emailVerified: new Date(),
-          tier: tier || "free",
-          stripeCustomerId,
-          stripeSubscriptionId: stripeSubId,
+          stripeCustomerId: stripeCustomerId ?? undefined,
         },
       })
     } catch (e: unknown) {
-      // Race condition: webhook may have just created the user
+      // Race condition: webhook may have just created the user.
       if (e && typeof e === "object" && "code" in e && e.code === "P2002") {
         user = await prisma.user.findUnique({ where: { email: customerEmail } })
       } else {
         throw e
       }
     }
+  }
 
-    // Create subscription record if user was just created here
-    if (user && planId && stripeSubId) {
-      const stripeSub = await stripe.subscriptions.retrieve(stripeSubId)
-      const item = stripeSub.items.data[0]
-      await prisma.subscription.upsert({
-        where: { stripeSubscriptionId: stripeSubId },
-        create: {
-          userId: user.id,
-          planId,
-          stripeSubscriptionId: stripeSubId,
-          stripeCustomerId,
-          status: stripeSub.status,
-          currentPeriodStart: new Date((item?.current_period_start ?? 0) * 1000),
-          currentPeriodEnd: new Date((item?.current_period_end ?? 0) * 1000),
-        },
-        update: {},
-      })
-    }
-  } else if (!user.stripeCustomerId) {
-    // User exists (e.g. from OAuth) but webhook hasn't linked Stripe yet
-    await prisma.user.update({
+  if (!user) {
+    return redirectWithError(req, errorPath, "account_creation_failed")
+  }
+
+  const resolvedCustomerId = stripeCustomerId ?? user.stripeCustomerId
+  if (!resolvedCustomerId) {
+    return redirectWithError(req, errorPath, "missing_customer")
+  }
+
+  if (user.stripeCustomerId !== resolvedCustomerId) {
+    user = await prisma.user.update({
       where: { id: user.id },
       data: {
-        tier: tier || user.tier,
-        stripeCustomerId,
-        stripeSubscriptionId: stripeSubId,
+        stripeCustomerId: resolvedCustomerId,
       },
     })
   }
 
-  if (!user) {
-    return NextResponse.redirect(new URL("/pricing?error=account_creation_failed", req.url))
-  }
+  const period = getPeriodDates(stripeSub)
+
+  await prisma.subscription.upsert({
+    where: { stripeSubscriptionId: stripeSubId },
+    create: {
+      userId: user.id,
+      planId: resolvedPlan.id,
+      stripeSubscriptionId: stripeSubId,
+      stripeCustomerId: resolvedCustomerId,
+      status: stripeSub.status,
+      currentPeriodStart: period.start,
+      currentPeriodEnd: period.end,
+    },
+    update: {
+      userId: user.id,
+      planId: resolvedPlan.id,
+      stripeCustomerId: resolvedCustomerId,
+      status: stripeSub.status,
+      currentPeriodStart: period.start,
+      currentPeriodEnd: period.end,
+    },
+  })
+
+  await prisma.subscription.updateMany({
+    where: {
+      userId: user.id,
+      status: { in: [...ACTIVE_SUBSCRIPTION_STATUSES] },
+      NOT: { stripeSubscriptionId: stripeSubId },
+    },
+    data: {
+      status: "canceled",
+      cancelAtPeriodEnd: false,
+      canceledAt: new Date(),
+    },
+  })
 
   await enforceThumbnailCachePolicyForUser(user.id)
 
@@ -110,7 +191,7 @@ export async function GET(req: NextRequest) {
     ? "__Secure-authjs.session-token"
     : "authjs.session-token"
 
-  const response = NextResponse.redirect(new URL("/dashboard", req.url))
+  const response = NextResponse.redirect(new URL(successPath, req.url))
   response.cookies.set(cookieName, sessionToken, {
     httpOnly: true,
     sameSite: "lax",

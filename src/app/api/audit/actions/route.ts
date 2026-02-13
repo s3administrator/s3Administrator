@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import type { Prisma } from "@prisma/client"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/db"
+import { getUserPlanEntitlements } from "@/lib/plan-entitlements"
 import { getAuditCutoffDate, getAuditRetentionDays } from "@/lib/audit-retention"
 
 const SORT_FIELDS = [
@@ -79,16 +80,20 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { tier: true },
-  })
+  const [user, entitlements] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    }),
+    getUserPlanEntitlements(userId),
+  ])
 
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const retentionDays = getAuditRetentionDays(user.tier)
+  const tier = entitlements?.slug ?? "free"
+  const retentionDays = getAuditRetentionDays(tier)
   const retentionCutoff = getAuditCutoffDate(retentionDays)
 
   const { searchParams } = new URL(req.url)
@@ -188,8 +193,7 @@ export async function GET(req: Request) {
     sortBy,
     sortDir,
     retentionDays,
-    tier: user.tier,
+    tier,
     availableFrom: retentionCutoff.toISOString(),
   })
 }
-

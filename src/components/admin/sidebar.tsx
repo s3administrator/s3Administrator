@@ -17,6 +17,7 @@ import {
   Activity,
   ScrollText,
   Server,
+  FileText,
   ChevronsLeft,
   ChevronsRight,
 } from "lucide-react"
@@ -28,6 +29,7 @@ const navItems = [
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/plans", label: "Plans", icon: Package },
   { href: "/admin/subscriptions", label: "Subscriptions", icon: CreditCard },
+  { href: "/admin/transactions", label: "Transactions", icon: FileText },
   { href: "/admin/actions", label: "Actions", icon: Activity },
   { href: "/admin/logs", label: "System Logs", icon: ScrollText },
   { href: "/admin/server", label: "Server Metrics", icon: Server },

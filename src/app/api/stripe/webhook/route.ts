@@ -2,7 +2,23 @@ import { NextRequest, NextResponse } from "next/server"
 import { stripe } from "@/lib/stripe"
 import { prisma } from "@/lib/db"
 import { enforceThumbnailCachePolicyForUser } from "@/lib/thumbnail-cache-policy"
+import { ACTIVE_SUBSCRIPTION_STATUSES } from "@/lib/subscription-status"
 import Stripe from "stripe"
+
+async function deactivateOtherActiveSubscriptions(userId: string, keepStripeSubscriptionId: string) {
+  await prisma.subscription.updateMany({
+    where: {
+      userId,
+      status: { in: [...ACTIVE_SUBSCRIPTION_STATUSES] },
+      NOT: { stripeSubscriptionId: keepStripeSubscriptionId },
+    },
+    data: {
+      status: "canceled",
+      cancelAtPeriodEnd: false,
+      canceledAt: new Date(),
+    },
+  })
+}
 
 export async function POST(req: NextRequest) {
   const body = await req.text()
@@ -39,32 +55,31 @@ export async function POST(req: NextRequest) {
       const userId = session.metadata?.userId
       const planId = session.metadata?.planId
       const stripeSubId = session.subscription as string
+      if (!stripeSubId) break
 
-      // Resolve tier from plan lookup instead of trusting metadata
-      const resolvedPlan = planId
-        ? await prisma.plan.findUnique({ where: { id: planId } })
-        : null
-      const tier = resolvedPlan?.slug ?? session.metadata?.tier
+      const stripeSub = await stripe.subscriptions.retrieve(stripeSubId)
+      const stripePriceId = stripeSub.items.data[0]?.price?.id
 
-      if (userId && tier && stripeSubId) {
+      const resolvedPlan =
+        (planId ? await prisma.plan.findUnique({ where: { id: planId } }) : null) ??
+        (stripePriceId
+          ? await prisma.plan.findUnique({ where: { stripePriceId } })
+          : null)
+
+      if (userId) {
         // Authenticated checkout — user already exists
-        const stripeSub = await stripe.subscriptions.retrieve(stripeSubId)
-
         await prisma.user.update({
           where: { id: userId },
-          data: {
-            tier,
-            stripeSubscriptionId: stripeSubId,
-          },
+          data: { stripeCustomerId: stripeSub.customer as string },
         })
 
-        if (planId) {
+        if (resolvedPlan) {
           const period = getPeriodDates(stripeSub)
           await prisma.subscription.upsert({
             where: { stripeSubscriptionId: stripeSubId },
             create: {
               userId,
-              planId,
+              planId: resolvedPlan.id,
               stripeSubscriptionId: stripeSubId,
               stripeCustomerId: stripeSub.customer as string,
               status: stripeSub.status,
@@ -72,15 +87,19 @@ export async function POST(req: NextRequest) {
               currentPeriodEnd: period.end,
             },
             update: {
+              planId: resolvedPlan.id,
+              stripeCustomerId: stripeSub.customer as string,
               status: stripeSub.status,
               currentPeriodStart: period.start,
               currentPeriodEnd: period.end,
             },
           })
+
+          await deactivateOtherActiveSubscriptions(userId, stripeSubId)
         }
 
         await enforceThumbnailCachePolicyForUser(userId)
-      } else if (session.metadata?.guest === "true" && tier && stripeSubId && resolvedPlan && planId) {
+      } else if (session.metadata?.guest === "true" && resolvedPlan) {
         // Guest checkout — find or create user from Stripe email
         const customerEmail = session.customer_details?.email
         const stripeCustomerId = session.customer as string
@@ -90,7 +109,6 @@ export async function POST(req: NextRequest) {
           break
         }
 
-        const stripeSub = await stripe.subscriptions.retrieve(stripeSubId)
         const period = getPeriodDates(stripeSub)
 
         let user = await prisma.user.findUnique({
@@ -100,11 +118,7 @@ export async function POST(req: NextRequest) {
         if (user) {
           await prisma.user.update({
             where: { id: user.id },
-            data: {
-              tier,
-              stripeCustomerId,
-              stripeSubscriptionId: stripeSubId,
-            },
+            data: { stripeCustomerId },
           })
         } else {
           try {
@@ -112,9 +126,7 @@ export async function POST(req: NextRequest) {
               data: {
                 email: customerEmail,
                 emailVerified: new Date(),
-                tier,
                 stripeCustomerId,
-                stripeSubscriptionId: stripeSubId,
               },
             })
           } catch (e: unknown) {
@@ -124,7 +136,7 @@ export async function POST(req: NextRequest) {
               if (user) {
                 await prisma.user.update({
                   where: { id: user.id },
-                  data: { tier, stripeCustomerId, stripeSubscriptionId: stripeSubId },
+                  data: { stripeCustomerId },
                 })
               }
             } else {
@@ -138,7 +150,7 @@ export async function POST(req: NextRequest) {
             where: { stripeSubscriptionId: stripeSubId },
             create: {
               userId: user.id,
-              planId,
+              planId: resolvedPlan.id,
               stripeSubscriptionId: stripeSubId,
               stripeCustomerId,
               status: stripeSub.status,
@@ -146,12 +158,15 @@ export async function POST(req: NextRequest) {
               currentPeriodEnd: period.end,
             },
             update: {
+              planId: resolvedPlan.id,
+              stripeCustomerId,
               status: stripeSub.status,
               currentPeriodStart: period.start,
               currentPeriodEnd: period.end,
             },
           })
 
+          await deactivateOtherActiveSubscriptions(user.id, stripeSubId)
           await enforceThumbnailCachePolicyForUser(user.id)
         }
       }
@@ -171,13 +186,6 @@ export async function POST(req: NextRequest) {
         // Look up the plan by stripePriceId
         const plan = await prisma.plan.findUnique({
           where: { stripePriceId: priceId },
-        })
-
-        const tier = plan?.slug ?? "free"
-
-        await prisma.user.update({
-          where: { id: user.id },
-          data: { tier },
         })
 
         // Update or create subscription record
@@ -207,6 +215,8 @@ export async function POST(req: NextRequest) {
               ...subData,
             },
           })
+
+          await deactivateOtherActiveSubscriptions(user.id, subscription.id)
         } else {
           // Plan not found in DB — just update if exists
           await prisma.subscription.updateMany({
@@ -222,24 +232,23 @@ export async function POST(req: NextRequest) {
 
     case "customer.subscription.deleted": {
       const subscription = event.data.object as Stripe.Subscription
-      const customerId = subscription.customer as string
-      const affectedUsers = await prisma.user.findMany({
-        where: { stripeCustomerId: customerId },
-        select: { id: true },
-      })
-
-      await prisma.user.updateMany({
-        where: { stripeCustomerId: customerId },
-        data: { tier: "free", stripeSubscriptionId: null },
+      const affectedSubscriptions = await prisma.subscription.findMany({
+        where: { stripeSubscriptionId: subscription.id },
+        select: { userId: true },
       })
 
       await prisma.subscription.updateMany({
         where: { stripeSubscriptionId: subscription.id },
-        data: { status: "canceled" },
+        data: {
+          status: "canceled",
+          cancelAtPeriodEnd: false,
+          canceledAt: new Date(),
+        },
       })
 
-      for (const affectedUser of affectedUsers) {
-        await enforceThumbnailCachePolicyForUser(affectedUser.id)
+      const affectedUserIds = [...new Set(affectedSubscriptions.map((sub) => sub.userId))]
+      for (const userId of affectedUserIds) {
+        await enforceThumbnailCachePolicyForUser(userId)
       }
       break
     }

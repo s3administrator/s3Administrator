@@ -66,7 +66,10 @@ export default function AdminUsersPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tier, role }),
       })
-      if (!res.ok) throw new Error("Failed to update user")
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        throw new Error(data?.error ?? "Failed to update user")
+      }
       return res.json()
     },
     onSuccess: () => {
@@ -74,7 +77,8 @@ export default function AdminUsersPage() {
       queryClient.invalidateQueries({ queryKey: ["admin-stats"] })
       toast.success("User updated")
     },
-    onError: () => toast.error("Failed to update user"),
+    onError: (err) =>
+      toast.error(err instanceof Error ? err.message : "Failed to update user"),
   })
 
   const deleteMutation = useMutation({

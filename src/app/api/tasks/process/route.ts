@@ -7,12 +7,12 @@ import {
   PutObjectCommand,
   type S3Client,
 } from "@aws-sdk/client-s3"
-import type { Prisma } from "@prisma/client"
+import { Prisma } from "@prisma/client"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/db"
 import { getS3Client } from "@/lib/s3"
 import { rebuildUserExtensionStats } from "@/lib/file-stats"
-import { buildFileSearchWhereClause, parseScopes } from "@/lib/file-search"
+import { buildFileSearchSqlWhereClause, parseScopes } from "@/lib/file-search"
 import { getMediaTypeFromExtension } from "@/lib/media"
 import { getUserPlanEntitlements } from "@/lib/plan-entitlements"
 import { generateVideoThumbnail } from "@/lib/thumbnail-worker"
@@ -52,6 +52,10 @@ interface BulkDeleteTaskProgress {
   total: number
   deleted: number
   remaining: number
+}
+
+interface CountRow {
+  total: bigint
 }
 
 type TransferScope = "folder" | "bucket"
@@ -1182,7 +1186,7 @@ export async function POST() {
       return NextResponse.json({ processed: false, message: "Invalid task payload" })
     }
 
-    const whereClause = buildFileSearchWhereClause({
+    const whereClause = buildFileSearchSqlWhereClause({
       userId: session.user.id,
       query: payload.query,
       credentialIds: payload.selectedCredentialIds,
@@ -1190,19 +1194,22 @@ export async function POST() {
       type: payload.selectedType,
     })
 
-    const batch = await prisma.fileMetadata.findMany({
-      where: whereClause,
-      select: {
-        id: true,
-        key: true,
-        bucket: true,
-        credentialId: true,
-      },
-      orderBy: {
-        id: "asc",
-      },
-      take: CHUNK_SIZE,
-    })
+    const batch = await prisma.$queryRaw<Array<{
+      id: string
+      key: string
+      bucket: string
+      credentialId: string
+    }>>(Prisma.sql`
+      SELECT
+        fm."id",
+        fm."key",
+        fm."bucket",
+        fm."credentialId"
+      FROM "FileMetadata" fm
+      WHERE ${whereClause}
+      ORDER BY fm."id" ASC
+      LIMIT ${CHUNK_SIZE}
+    `)
 
     const progress = parseProgress(candidate.progress)
 
@@ -1287,7 +1294,12 @@ export async function POST() {
 
     await rebuildUserExtensionStats(session.user.id)
 
-    const remaining = await prisma.fileMetadata.count({ where: whereClause })
+    const [remainingResult] = await prisma.$queryRaw<CountRow[]>(Prisma.sql`
+      SELECT COUNT(*)::bigint AS "total"
+      FROM "FileMetadata" fm
+      WHERE ${whereClause}
+    `)
+    const remaining = Number(remainingResult?.total ?? 0)
     const total = progress.total > 0 ? progress.total : remaining + deletedIds.size
     const deleted = Math.max(0, total - remaining)
 

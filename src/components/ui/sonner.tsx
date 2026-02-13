@@ -18,7 +18,9 @@ const Toaster = ({ ...props }: ToasterProps) => {
       theme={
         resolvedTheme === "dark" ||
         resolvedTheme === "midnight" ||
-        resolvedTheme === "graphite"
+        resolvedTheme === "graphite" ||
+        resolvedTheme === "graphite-bright" ||
+        resolvedTheme === "graphite-plus"
           ? "dark"
           : "light"
       }

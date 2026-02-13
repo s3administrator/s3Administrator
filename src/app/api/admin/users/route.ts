@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/db"
 import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
+import { ACTIVE_SUBSCRIPTION_STATUSES } from "@/lib/subscription-status"
 
 export async function GET(req: Request) {
   const session = await auth()
@@ -27,10 +28,17 @@ export async function GET(req: Request) {
         name: true,
         email: true,
         role: true,
-        tier: true,
         stripeCustomerId: true,
-        stripeSubscriptionId: true,
         createdAt: true,
+        subscriptions: {
+          where: { status: { in: [...ACTIVE_SUBSCRIPTION_STATUSES] } },
+          orderBy: [{ currentPeriodEnd: "desc" }, { createdAt: "desc" }],
+          take: 1,
+          select: {
+            stripeSubscriptionId: true,
+            plan: { select: { slug: true } },
+          },
+        },
         _count: {
           select: { s3Credentials: true, fileMetadata: true },
         },
@@ -39,5 +47,20 @@ export async function GET(req: Request) {
     prisma.user.count(),
   ])
 
-  return NextResponse.json({ users, total, page, limit })
+  return NextResponse.json({
+    users: users.map((user) => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      tier: user.subscriptions[0]?.plan.slug ?? "free",
+      stripeCustomerId: user.stripeCustomerId,
+      stripeSubscriptionId: user.subscriptions[0]?.stripeSubscriptionId ?? null,
+      createdAt: user.createdAt,
+      _count: user._count,
+    })),
+    total,
+    page,
+    limit,
+  })
 }

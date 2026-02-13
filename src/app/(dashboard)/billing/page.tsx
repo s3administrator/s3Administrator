@@ -25,14 +25,95 @@ interface PlanData {
   stripePriceId: string | null
 }
 
+interface BillingSummaryData {
+  activeSubscription: {
+    id: string
+    status: string
+    planName: string
+    planSlug: string
+    priceMonthly: number
+    currentPeriodStart: string
+    currentPeriodEnd: string
+    cancelAtPeriodEnd: boolean
+  } | null
+  nextPayment: {
+    amountDue: number
+    amountRemaining: number
+    currency: string
+    dueAt: string | null
+    periodStart: string | null
+    periodEnd: string | null
+  } | null
+  scheduledUpdate: {
+    effectiveAt: string | null
+    targetPlanId: string | null
+    targetPlanName: string
+    targetPlanSlug: string | null
+    targetPriceMonthly: number | null
+    currency: string | null
+  } | null
+  previousPayments: Array<{
+    id: string
+    number: string | null
+    amountPaid: number
+    currency: string
+    paidAt: string | null
+    hostedInvoiceUrl: string | null
+    invoicePdf: string | null
+    status: string | null
+  }>
+}
+
+const EMPTY_BILLING_SUMMARY: BillingSummaryData = {
+  activeSubscription: null,
+  nextPayment: null,
+  scheduledUpdate: null,
+  previousPayments: [],
+}
+
 function formatPrice(cents: number): string {
   if (cents === 0) return "$0"
   return `$${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`
 }
 
+function formatCurrency(cents: number, currency: string | null | undefined): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: (currency ?? "usd").toUpperCase(),
+  }).format(cents / 100)
+}
+
 function formatLimit(n: number): string {
   if (n === 0) return "Unlimited"
   return n.toLocaleString()
+}
+
+function formatDate(value: string | null | undefined): string {
+  if (!value) return "N/A"
+  return new Date(value).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  })
+}
+
+function subscriptionStatusBadge(status: string, cancelAtPeriodEnd: boolean) {
+  if (cancelAtPeriodEnd && status === "active") {
+    return <Badge variant="secondary">Canceling</Badge>
+  }
+
+  switch (status) {
+    case "active":
+      return <Badge variant="default">Active</Badge>
+    case "past_due":
+      return <Badge variant="destructive">Past Due</Badge>
+    case "trialing":
+      return <Badge variant="outline">Trialing</Badge>
+    case "canceled":
+      return <Badge variant="secondary">Canceled</Badge>
+    default:
+      return <Badge variant="secondary">{status}</Badge>
+  }
 }
 
 export default function BillingPage() {
@@ -58,6 +139,16 @@ export default function BillingPage() {
     },
   })
 
+  const { data: billingSummary = EMPTY_BILLING_SUMMARY, isLoading: billingSummaryLoading } =
+    useQuery<BillingSummaryData>({
+      queryKey: ["billing-summary"],
+      queryFn: async () => {
+        const res = await fetch("/api/stripe/billing-summary")
+        if (!res.ok) return EMPTY_BILLING_SUMMARY
+        return res.json()
+      },
+    })
+
   const currentTier = usage?.tier || "free"
 
   async function handleSubscribe(plan: PlanData) {
@@ -80,14 +171,21 @@ export default function BillingPage() {
       })
       const data = await res.json()
 
-      if (data.upgraded) {
-        // In-place upgrade/downgrade happened
+      if (data.downgradedDeferred) {
+        const effectiveDate = data.effectiveAt
+          ? new Date(data.effectiveAt).toLocaleDateString()
+          : "the end of your current billing period"
+        toast.success(`Downgrade scheduled for ${effectiveDate}.`)
+        queryClient.invalidateQueries({ queryKey: ["billing-summary"] })
+      } else if (data.upgraded) {
+        // Immediate upgrade/lateral plan change happened
         toast.success("Subscription updated! Changes may take a moment to reflect.")
         queryClient.invalidateQueries({ queryKey: ["usage"] })
+        queryClient.invalidateQueries({ queryKey: ["billing-summary"] })
       } else if (data.url) {
-        window.location.href = data.url
+        window.location.assign(data.url)
       } else {
-        toast.error("Failed to create checkout session")
+        toast.error(data.error || "Failed to create checkout session")
       }
     } catch {
       toast.error("Failed to process subscription change")
@@ -100,7 +198,7 @@ export default function BillingPage() {
       const res = await fetch("/api/stripe/portal", { method: "POST" })
       const data = await res.json()
       if (data.url) {
-        window.location.href = data.url
+        window.location.assign(data.url)
       } else {
         toast.error(data.error || "Failed to open billing portal")
       }
@@ -150,6 +248,152 @@ export default function BillingPage() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {billingSummaryLoading ? (
+        <div className="mb-6 grid gap-4 lg:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Card key={i} className="animate-pulse">
+              <CardHeader className="space-y-2">
+                <div className="h-4 w-28 rounded bg-muted" />
+                <div className="h-6 w-32 rounded bg-muted" />
+              </CardHeader>
+              <CardContent>
+                <div className="h-3 w-40 rounded bg-muted" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <>
+          <div className="mb-6 grid gap-4 lg:grid-cols-3">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Subscription</CardTitle>
+                <CardDescription>Current plan and cycle</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                {billingSummary.activeSubscription ? (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">{billingSummary.activeSubscription.planName}</span>
+                      {subscriptionStatusBadge(
+                        billingSummary.activeSubscription.status,
+                        billingSummary.activeSubscription.cancelAtPeriodEnd,
+                      )}
+                    </div>
+                    <p className="text-muted-foreground">
+                      {billingSummary.activeSubscription.cancelAtPeriodEnd ? "Ends" : "Renews"}{" "}
+                      {formatDate(billingSummary.activeSubscription.currentPeriodEnd)}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-muted-foreground">You are currently on the free plan.</p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Next Payment</CardTitle>
+                <CardDescription>Upcoming invoice estimate</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                {billingSummary.nextPayment ? (
+                  <>
+                    <p className="text-2xl font-bold">
+                      {formatCurrency(
+                        billingSummary.nextPayment.amountDue,
+                        billingSummary.nextPayment.currency,
+                      )}
+                    </p>
+                    <p className="text-muted-foreground">
+                      Due {formatDate(billingSummary.nextPayment.dueAt)}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-muted-foreground">No upcoming payment.</p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Scheduled Update</CardTitle>
+                <CardDescription>Changes planned for future billing cycles</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                {billingSummary.scheduledUpdate ? (
+                  <>
+                    <p className="font-medium">{billingSummary.scheduledUpdate.targetPlanName}</p>
+                    <p className="text-muted-foreground">
+                      Effective {formatDate(billingSummary.scheduledUpdate.effectiveAt)}
+                    </p>
+                    {billingSummary.scheduledUpdate.targetPriceMonthly !== null ? (
+                      <p className="text-muted-foreground">
+                        {formatCurrency(
+                          billingSummary.scheduledUpdate.targetPriceMonthly,
+                          billingSummary.scheduledUpdate.currency,
+                        )}
+                        /month
+                      </p>
+                    ) : null}
+                  </>
+                ) : billingSummary.activeSubscription?.cancelAtPeriodEnd ? (
+                  <p className="text-muted-foreground">
+                    Subscription is set to cancel on{" "}
+                    {formatDate(billingSummary.activeSubscription.currentPeriodEnd)}.
+                  </p>
+                ) : (
+                  <p className="text-muted-foreground">No scheduled plan changes.</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="text-base">Previous Payments</CardTitle>
+              <CardDescription>Latest paid invoices from Stripe</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {billingSummary.previousPayments.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No payments yet.</p>
+              ) : (
+                <div className="rounded-md border">
+                  {billingSummary.previousPayments.map((payment) => {
+                    const invoiceUrl = payment.hostedInvoiceUrl ?? payment.invoicePdf
+                    return (
+                      <div
+                        key={payment.id}
+                        className="flex flex-col gap-3 border-b p-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div>
+                          <p className="text-sm font-medium">
+                            {formatCurrency(payment.amountPaid, payment.currency)}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatDate(payment.paidAt)} · {payment.number ?? payment.id}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline">Paid</Badge>
+                          {invoiceUrl ? (
+                            <Button variant="outline" size="sm" asChild>
+                              <a href={invoiceUrl} target="_blank" rel="noreferrer">
+                                View Invoice
+                              </a>
+                            </Button>
+                          ) : null}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </>
       )}
 
       {plansLoading ? (

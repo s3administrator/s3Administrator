@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
+import { Prisma } from "@prisma/client"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/db"
 import {
-  buildFileSearchWhereClause,
+  buildFileSearchSqlWhereClause,
   parseScopes,
 } from "@/lib/file-search"
 
@@ -11,6 +12,10 @@ interface BulkDeletePayload {
   selectedType?: string
   selectedCredentialIds?: string[]
   selectedBucketScopes?: string[]
+}
+
+interface CountRow {
+  total: bigint
 }
 
 export async function POST(request: NextRequest) {
@@ -37,15 +42,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const whereClause = buildFileSearchWhereClause({
+    const whereClause = buildFileSearchSqlWhereClause({
       userId: session.user.id,
       query,
       credentialIds: selectedCredentialIds,
       scopes: parseScopes(selectedBucketScopes),
       type: selectedType,
     })
-
-    const total = await prisma.fileMetadata.count({ where: whereClause })
+    const [countResult] = await prisma.$queryRaw<CountRow[]>(Prisma.sql`
+      SELECT COUNT(*)::bigint AS "total"
+      FROM "FileMetadata" fm
+      WHERE ${whereClause}
+    `)
+    const total = Number(countResult?.total ?? 0)
 
     if (total === 0) {
       return NextResponse.json(
