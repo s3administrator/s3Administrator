@@ -12,3 +12,10 @@ repos:
     hooks:
       - id: osv-scanner
         args: ["--lockfile", "package-lock.json"]
+  - repo: local
+    hooks:
+      - id: sonarqube
+        name: sonarqube
+        entry: scripts/sonarqube-pre-commit.sh
+        language: system
+        pass_filenames: false

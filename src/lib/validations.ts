@@ -25,7 +25,7 @@ export const s3OperationSchema = z.object({
 
 export const addCredentialSchema = z.object({
   label: z.string().min(1).max(100),
-  provider: z.enum(['AWS', 'HETZNER', 'CLOUDFLARE_R2', 'GENERIC']),
+  provider: z.enum(['AWS', 'HETZNER', 'CLOUDFLARE_R2', 'MINIO', 'GENERIC']),
   endpoint: z.string().min(1),
   region: z.string().min(1).max(50),
   accessKey: z.string().min(1),
@@ -69,6 +69,47 @@ export const createFolderSchema = z.object({
   credentialId: z.string().optional(),
   key: s3KeySchema,
 })
+
+export const bucketManageSchema = z.object({
+  bucket: s3BucketSchema,
+  credentialId: z.string().optional(),
+})
+
+export const bucketCorsSettingsUpdateSchema = z.object({
+  enabled: z.boolean(),
+  allowedOrigins: z.array(z.string().min(1).max(2048)).max(100),
+  allowedMethods: z.array(z.string().min(1).max(32)).max(20),
+  allowedHeaders: z.array(z.string().min(1).max(1024)).max(100),
+  exposeHeaders: z.array(z.string().min(1).max(1024)).max(100),
+  maxAgeSeconds: z.number().int().min(0).max(86_400),
+})
+
+export const bucketVersioningSettingsUpdateSchema = z.object({
+  enabled: z.boolean(),
+})
+
+export const bucketLifecycleSettingsUpdateSchema = z.object({
+  enabled: z.boolean(),
+  expirationDays: z.number().int().min(1).max(36_500).nullable(),
+})
+
+export const bucketSettingsPatchSchema = z
+  .object({
+    bucket: s3BucketSchema,
+    credentialId: z.string().optional(),
+    cors: bucketCorsSettingsUpdateSchema.optional(),
+    versioning: bucketVersioningSettingsUpdateSchema.optional(),
+    lifecycle: bucketLifecycleSettingsUpdateSchema.optional(),
+  })
+  .superRefine((value, ctx) => {
+    const configuredSections = [value.cors, value.versioning, value.lifecycle].filter(Boolean)
+    if (configuredSections.length !== 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Exactly one settings section must be provided",
+      })
+    }
+  })
 
 export const galleryListSchema = z.object({
   bucket: s3BucketSchema,

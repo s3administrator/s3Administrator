@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { stripe } from "@/lib/stripe"
 import { rateLimitByIp, rateLimitResponse } from "@/lib/rate-limit"
+import { absoluteUrl } from "@/lib/site-url"
 
 export async function POST(req: NextRequest) {
   const rl = rateLimitByIp(req, "guest-checkout", 3)
@@ -18,8 +19,8 @@ export async function POST(req: NextRequest) {
     const checkoutSession = await stripe.checkout.sessions.create({
       mode: "subscription",
       line_items: [{ price: plan.stripePriceId, quantity: 1 }],
-      success_url: `${process.env.AUTH_URL}/api/auth/subscribe-callback?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.AUTH_URL}/pricing?canceled=true`,
+      success_url: absoluteUrl("/api/auth/subscribe-callback?session_id={CHECKOUT_SESSION_ID}"),
+      cancel_url: absoluteUrl("/pricing?canceled=true"),
       metadata: { planId: plan.id, tier: plan.slug, guest: "true" },
     })
 

@@ -5,7 +5,16 @@ import { decrypt } from "@/lib/crypto"
 export async function getS3Client(
   userId: string,
   credentialId?: string
-): Promise<{ client: S3Client; credential: { id: string; endpoint: string; region: string } }> {
+): Promise<{
+  client: S3Client
+  credential: {
+    id: string
+    endpoint: string
+    region: string
+    provider: string
+    label: string
+  }
+}> {
   const credential = await prisma.s3Credential.findFirst({
     where: credentialId
       ? { id: credentialId, userId }
@@ -35,6 +44,8 @@ export async function getS3Client(
       id: credential.id,
       endpoint: credential.endpoint,
       region: credential.region,
+      provider: credential.provider,
+      label: credential.label,
     },
   }
 }

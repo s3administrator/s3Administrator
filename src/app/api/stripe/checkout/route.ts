@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db"
 import { stripe } from "@/lib/stripe"
 import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
 import { ACTIVE_SUBSCRIPTION_STATUSES } from "@/lib/subscription-status"
+import { absoluteUrl } from "@/lib/site-url"
 import Stripe from "stripe"
 
 function getPeriodDates(sub: Awaited<ReturnType<typeof stripe.subscriptions.retrieve>>) {
@@ -248,8 +249,10 @@ export async function POST(req: NextRequest) {
     customer: customerId,
     mode: "subscription",
     line_items: [{ price: plan.stripePriceId, quantity: 1 }],
-    success_url: `${process.env.AUTH_URL}/api/auth/subscribe-callback?session_id={CHECKOUT_SESSION_ID}&next=%2Fbilling`,
-    cancel_url: `${process.env.AUTH_URL}/billing?canceled=true`,
+    success_url: absoluteUrl(
+      "/api/auth/subscribe-callback?session_id={CHECKOUT_SESSION_ID}&next=%2Fbilling"
+    ),
+    cancel_url: absoluteUrl("/billing?canceled=true"),
     metadata: { userId: session.user.id, planId: plan.id, tier: plan.slug },
   })
 

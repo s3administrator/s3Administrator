@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db"
 import { enforceThumbnailCachePolicyForUser } from "@/lib/thumbnail-cache-policy"
 import { randomUUID, randomBytes } from "crypto"
 import { ACTIVE_SUBSCRIPTION_STATUSES } from "@/lib/subscription-status"
+import { absoluteUrl } from "@/lib/site-url"
 
 function getSafeRedirectPath(path: string | null, fallback: string): string {
   if (!path || !path.startsWith("/") || path.startsWith("//")) {
@@ -12,8 +13,8 @@ function getSafeRedirectPath(path: string | null, fallback: string): string {
   return path
 }
 
-function redirectWithError(req: NextRequest, path: string, error: string) {
-  const target = new URL(path, req.url)
+function redirectWithError(path: string, error: string) {
+  const target = new URL(absoluteUrl(path))
   target.searchParams.set("error", error)
   return NextResponse.redirect(target)
 }
@@ -38,18 +39,18 @@ export async function GET(req: NextRequest) {
 
   const sessionId = req.nextUrl.searchParams.get("session_id")
   if (!sessionId) {
-    return redirectWithError(req, errorPath, "missing_session")
+    return redirectWithError(errorPath, "missing_session")
   }
 
   let stripeSession
   try {
     stripeSession = await stripe.checkout.sessions.retrieve(sessionId)
   } catch {
-    return redirectWithError(req, errorPath, "invalid_session")
+    return redirectWithError(errorPath, "invalid_session")
   }
 
   if (!["paid", "no_payment_required"].includes(stripeSession.payment_status)) {
-    return redirectWithError(req, errorPath, "unpaid")
+    return redirectWithError(errorPath, "unpaid")
   }
 
   const userId = stripeSession.metadata?.userId
@@ -65,7 +66,7 @@ export async function GET(req: NextRequest) {
       : stripeSession.subscription?.id ?? null
 
   if (!stripeSubId) {
-    return redirectWithError(req, errorPath, "missing_subscription")
+    return redirectWithError(errorPath, "missing_subscription")
   }
 
   const stripeSub = await stripe.subscriptions.retrieve(stripeSubId)
@@ -77,7 +78,7 @@ export async function GET(req: NextRequest) {
       : null)
 
   if (!resolvedPlan) {
-    return redirectWithError(req, errorPath, "invalid_plan")
+    return redirectWithError(errorPath, "invalid_plan")
   }
 
   // Find or create user — prefer metadata.userId for authenticated checkout,
@@ -95,7 +96,7 @@ export async function GET(req: NextRequest) {
   }
 
   if (!user && !customerEmail) {
-    return redirectWithError(req, errorPath, "no_user")
+    return redirectWithError(errorPath, "no_user")
   }
 
   if (!user && customerEmail) {
@@ -118,12 +119,12 @@ export async function GET(req: NextRequest) {
   }
 
   if (!user) {
-    return redirectWithError(req, errorPath, "account_creation_failed")
+    return redirectWithError(errorPath, "account_creation_failed")
   }
 
   const resolvedCustomerId = stripeCustomerId ?? user.stripeCustomerId
   if (!resolvedCustomerId) {
-    return redirectWithError(req, errorPath, "missing_customer")
+    return redirectWithError(errorPath, "missing_customer")
   }
 
   if (user.stripeCustomerId !== resolvedCustomerId) {
@@ -186,12 +187,12 @@ export async function GET(req: NextRequest) {
   })
 
   // Set Auth.js session cookie and redirect to dashboard
-  const useSecureCookies = process.env.AUTH_URL?.startsWith("https://") ?? false
+  const useSecureCookies = absoluteUrl("/").startsWith("https://")
   const cookieName = useSecureCookies
     ? "__Secure-authjs.session-token"
     : "authjs.session-token"
 
-  const response = NextResponse.redirect(new URL(successPath, req.url))
+  const response = NextResponse.redirect(absoluteUrl(successPath))
   response.cookies.set(cookieName, sessionToken, {
     httpOnly: true,
     sameSite: "lax",

@@ -35,9 +35,13 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 
-## Security Scanning (Semgrep pre-commit)
+## Security Scanning (pre-commit)
 
-This repository includes a pre-commit hook configuration for Semgrep in `.pre-commit-config.yaml`.
+This repository includes pre-commit hooks in `.pre-commit-config.yaml`:
+
+- Semgrep (`p/security-audit`)
+- OSV scanner (`package-lock.json`)
+- SonarQube (runs when Sonar env vars are configured)
 
 Setup:
 
@@ -51,7 +55,24 @@ Run on all files:
 pre-commit run semgrep --all-files
 ```
 
-The hook is configured with `p/security-audit` and runs automatically on staged files before each commit.
+Run SonarQube hook manually:
+
+```bash
+pre-commit run sonarqube --all-files
+```
+
+SonarQube hook env vars:
+
+```bash
+SONAR_HOST_URL=
+SONAR_TOKEN=
+SONAR_PROJECT_KEY=
+# Optional:
+SONAR_ORGANIZATION=
+SONAR_PROJECT_NAME=
+SONAR_SOURCES=src,prisma,scripts
+SONAR_EXCLUSIONS=node_modules/**,.next/**,coverage/**,dist/**,build/**
+```
 
 ## Gallery Mode and Video Thumbnails
 

@@ -83,7 +83,7 @@ export async function GET(req: Request) {
   const [user, entitlements] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true },
+      select: { id: true, role: true },
     }),
     getUserPlanEntitlements(userId),
   ])
@@ -92,7 +92,9 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  if (!entitlements?.auditLogs) {
+  const isAdmin = user.role === "admin"
+
+  if (!isAdmin && !entitlements?.auditLogs) {
     return NextResponse.json(
       {
         error: "Audit logs are disabled for the current plan",
@@ -105,9 +107,9 @@ export async function GET(req: Request) {
     )
   }
 
-  const tier = entitlements?.slug ?? "free"
-  const retentionDays = getAuditRetentionDays(tier)
-  const retentionCutoff = getAuditCutoffDate(retentionDays)
+  const tier = isAdmin ? "admin" : entitlements?.slug ?? "free"
+  const retentionDays = isAdmin ? 3650 : getAuditRetentionDays(tier)
+  const retentionCutoff = isAdmin ? new Date(0) : getAuditCutoffDate(retentionDays)
 
   const { searchParams } = new URL(req.url)
   const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10))
@@ -124,6 +126,7 @@ export async function GET(req: Request) {
   const method = safeQueryString(searchParams, "method", 16)
   const target = safeQueryString(searchParams, "target", 512)
   const ipAddress = safeQueryString(searchParams, "ipAddress", 64)
+  const userFilter = safeQueryString(searchParams, "user", 120)
   const dateFrom = parseDateStart(safeQueryString(searchParams, "dateFrom", 32))
   const dateTo = parseDateEnd(safeQueryString(searchParams, "dateTo", 32))
   const sortBy = parseSortField(safeQueryString(searchParams, "sortBy", 24))
@@ -133,7 +136,6 @@ export async function GET(req: Request) {
     dateFrom && dateFrom > retentionCutoff ? dateFrom : retentionCutoff
 
   const whereAnd: Prisma.UserActionEventWhereInput[] = [
-    { userId },
     {
       createdAt: {
         gte: effectiveFrom,
@@ -141,6 +143,10 @@ export async function GET(req: Request) {
       },
     },
   ]
+
+  if (!isAdmin) {
+    whereAnd.push({ userId })
+  }
 
   if (eventType && eventType !== "all") {
     whereAnd.push({ eventType })
@@ -160,17 +166,40 @@ export async function GET(req: Request) {
   if (ipAddress) {
     whereAnd.push({ ipAddress: { contains: ipAddress, mode: "insensitive" } })
   }
+  if (isAdmin && userFilter) {
+    whereAnd.push({
+      user: {
+        OR: [
+          { email: { contains: userFilter, mode: "insensitive" } },
+          { name: { contains: userFilter, mode: "insensitive" } },
+        ],
+      },
+    })
+  }
 
   if (query) {
+    const queryOrFilters: Prisma.UserActionEventWhereInput[] = [
+      { eventType: { contains: query, mode: "insensitive" } },
+      { eventName: { contains: query, mode: "insensitive" } },
+      { path: { contains: query, mode: "insensitive" } },
+      { method: { contains: query, mode: "insensitive" } },
+      { target: { contains: query, mode: "insensitive" } },
+      { ipAddress: { contains: query, mode: "insensitive" } },
+    ]
+
+    if (isAdmin) {
+      queryOrFilters.push({
+        user: {
+          OR: [
+            { email: { contains: query, mode: "insensitive" } },
+            { name: { contains: query, mode: "insensitive" } },
+          ],
+        },
+      })
+    }
+
     whereAnd.push({
-      OR: [
-        { eventType: { contains: query, mode: "insensitive" } },
-        { eventName: { contains: query, mode: "insensitive" } },
-        { path: { contains: query, mode: "insensitive" } },
-        { method: { contains: query, mode: "insensitive" } },
-        { target: { contains: query, mode: "insensitive" } },
-        { ipAddress: { contains: query, mode: "insensitive" } },
-      ],
+      OR: queryOrFilters,
     })
   }
 
@@ -193,6 +222,15 @@ export async function GET(req: Request) {
         ipAddress: true,
         userAgent: true,
         createdAt: true,
+        user: isAdmin
+          ? {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            }
+          : false,
       },
     }),
     prisma.userActionEvent.count({ where }),
@@ -207,6 +245,7 @@ export async function GET(req: Request) {
     sortDir,
     retentionDays,
     tier,
+    scope: isAdmin ? "all" : "own",
     availableFrom: retentionCutoff.toISOString(),
   })
 }

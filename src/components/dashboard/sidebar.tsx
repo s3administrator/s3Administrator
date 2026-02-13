@@ -43,9 +43,11 @@ import {
   Activity,
   ChevronsLeft,
   ChevronsRight,
+  Cog,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ThemeSwitcher } from "@/components/theme-switcher"
+import { BucketSettingsSheet } from "@/components/dashboard/bucket-settings-sheet"
 
 interface BucketStatsItem {
   name: string
@@ -107,12 +109,15 @@ export function Sidebar({
   const [bucketSortField, setBucketSortField] = useState<"name" | "size" | "fileCount">("name")
   const [bucketSortDir, setBucketSortDir] = useState<"asc" | "desc">("asc")
   const [selectedCredentials, setSelectedCredentials] = useState<string[]>([])
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsBucket, setSettingsBucket] = useState<Bucket | null>(null)
   const sidebarCollapsed = collapsible && isCollapsed
   const isAdmin = session?.user?.role === "admin"
   const isOverviewActive =
     pathname === "/dashboard" &&
     !searchParams.get("bucket") &&
     !searchParams.get("prefix")
+  const isBucketsPageActive = pathname === "/dashboard/buckets"
   const isTasksActive = pathname === "/dashboard/tasks"
 
   const { data: buckets = [], isLoading: bucketsLoading } = useQuery<Bucket[]>({
@@ -239,6 +244,11 @@ export function Sidebar({
     )
   }
 
+  function openBucketSettings(bucket: Bucket) {
+    setSettingsBucket(bucket)
+    setSettingsOpen(true)
+  }
+
   const processTaskQueue = useCallback(async () => {
     try {
       let processedAny = false
@@ -352,6 +362,16 @@ export function Sidebar({
                 )}
               >
                 <FileSearch className="h-4 w-4" />
+              </Link>
+              <Link
+                href="/dashboard/buckets"
+                title="Buckets"
+                className={cn(
+                  "flex justify-center rounded-md px-2 py-2 hover:bg-accent",
+                  isBucketsPageActive && "bg-accent"
+                )}
+              >
+                <HardDrive className="h-4 w-4" />
               </Link>
               <Link
                 href="/audit-logs"
@@ -529,27 +549,46 @@ export function Sidebar({
                   const totalSize = bucketStat?.totalSize ?? 0
                   const fileCount = bucketStat?.fileCount ?? 0
                   return (
-                    <Tooltip key={`${bucket.credentialId}:${bucket.name}`}>
-                      <TooltipTrigger asChild>
-                        <Link
-                          href={href}
-                          className={cn(
-                            "flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-accent",
-                            isActive && "bg-accent"
-                          )}
-                        >
-                          <HardDrive className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm leading-tight break-words">{bucket.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {formatSize(totalSize)} · {fileCount}{" "}
-                              {fileCount === 1 ? "file" : "files"}
-                            </p>
-                          </div>
-                        </Link>
-                      </TooltipTrigger>
-                      <TooltipContent>{bucket.name}</TooltipContent>
-                    </Tooltip>
+                    <div
+                      key={`${bucket.credentialId}:${bucket.name}`}
+                      className={cn(
+                        "flex items-start gap-1 rounded-md px-1 py-1 hover:bg-accent",
+                        isActive && "bg-accent"
+                      )}
+                    >
+                      <Link
+                        href={href}
+                        className="flex min-w-0 flex-1 items-start gap-2 rounded-sm px-1 py-0.5"
+                      >
+                        <HardDrive className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm leading-tight break-words">{bucket.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatSize(totalSize)} · {fileCount}{" "}
+                            {fileCount === 1 ? "file" : "files"}
+                          </p>
+                        </div>
+                      </Link>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 shrink-0"
+                            aria-label={`Open settings for ${bucket.name}`}
+                            onClick={(event) => {
+                              event.preventDefault()
+                              event.stopPropagation()
+                              openBucketSettings(bucket)
+                            }}
+                          >
+                            <Cog className="h-3.5 w-3.5 text-muted-foreground" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Bucket settings</TooltipContent>
+                      </Tooltip>
+                    </div>
                   )
                 })}
               </div>
@@ -602,6 +641,17 @@ export function Sidebar({
             >
               <FileSearch className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               Search All Files
+            </Link>
+
+            <Link
+              href="/dashboard/buckets"
+              className={cn(
+                "flex items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-accent sm:py-1.5 sm:text-sm",
+                isBucketsPageActive && "bg-accent"
+              )}
+            >
+              <HardDrive className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              Buckets
             </Link>
 
             <Link
@@ -706,6 +756,20 @@ export function Sidebar({
           </div>
         )}
       </div>
+      <BucketSettingsSheet
+        open={settingsOpen}
+        onOpenChange={(nextOpen) => {
+          setSettingsOpen(nextOpen)
+          if (!nextOpen) {
+            setSettingsBucket(null)
+          }
+        }}
+        bucket={settingsBucket}
+        onDeleted={async () => {
+          await queryClient.invalidateQueries({ queryKey: ["buckets"] })
+          await queryClient.invalidateQueries({ queryKey: ["bucket-stats"] })
+        }}
+      />
     </TooltipProvider>
   )
 }

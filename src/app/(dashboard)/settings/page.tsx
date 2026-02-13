@@ -157,6 +157,8 @@ export default function SettingsPage() {
       endpoint = endpoint.replace("{region}", region)
     } else if (selectedProvider === "HETZNER") {
       endpoint = endpoint.replace("{region}", region)
+    } else if (selectedProvider === "MINIO") {
+      endpoint = "http://localhost:9000"
     }
 
     setForm((f) => ({
