@@ -10,6 +10,27 @@ const LOCAL_USER = {
   role: "admin",
 }
 
+const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "0.0.0.0", "::1"])
+
+function normalizeUrlEnvVar(key: "AUTH_URL" | "NEXT_PUBLIC_SITE_URL") {
+  const raw = process.env[key]?.trim()
+  if (!raw) return
+
+  if (raw.startsWith("http://") || raw.startsWith("https://")) return
+
+  const hostPort = raw.split("/")[0] || raw
+  const hostname = hostPort.split(":")[0]?.toLowerCase() || ""
+  const protocol = LOCAL_HOSTNAMES.has(hostname) ? "http" : "https"
+  const normalized = `${protocol}://${raw}`
+  process.env[key] = normalized
+
+  console.warn(`${key} did not include protocol; normalized to ${normalized}`)
+}
+
+// Auth.js expects absolute URL env values. Normalize bare hostnames like "localhost".
+normalizeUrlEnvVar("AUTH_URL")
+normalizeUrlEnvVar("NEXT_PUBLIC_SITE_URL")
+
 async function ensureLocalUser() {
   await prisma.user.upsert({
     where: { id: LOCAL_USER.id },

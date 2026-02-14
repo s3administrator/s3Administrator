@@ -14,23 +14,29 @@ if (!["dev", "build", "start"].includes(nextCommand)) {
   process.exit(1)
 }
 
-const environment = (process.env.ENVIRONMENT ?? "DEV").toUpperCase()
-const envFile = environment === "PROD" ? ".env.prod" : ".env.dev"
+const envFile = ".env"
 const envPath = resolve(process.cwd(), envFile)
 
-if (!existsSync(envPath)) {
-  console.error(`Missing required env file: ${envFile} (${envPath})`)
+if (existsSync(envPath)) {
+  dotenv.config({ path: envPath, override: false, quiet: true })
+} else {
+  console.warn(`Optional env file not found: ${envFile} (${envPath}); using process env.`)
+}
+
+const environment = process.env.ENVIRONMENT?.trim().toUpperCase()
+if (environment !== "COMMUNITY" && environment !== "CLOUD") {
+  console.error('ENVIRONMENT must be set to either "COMMUNITY" or "CLOUD".')
   process.exit(1)
 }
 
-dotenv.config({ path: envPath, override: false, quiet: true })
-
-const databaseUrl = process.env.DATABASE_URL?.trim()
-if (!databaseUrl) {
-  console.error(
-    `DATABASE_URL is required but missing/empty after loading ${envFile}.`,
-  )
-  process.exit(1)
+if (nextCommand !== "build") {
+  const databaseUrl = process.env.DATABASE_URL?.trim()
+  if (!databaseUrl) {
+    console.error(
+      `DATABASE_URL is required but missing/empty after loading ${envFile}.`,
+    )
+    process.exit(1)
+  }
 }
 
 const require = createRequire(import.meta.url)

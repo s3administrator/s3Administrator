@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/sheet"
 import { Loader2, PanelLeft } from "lucide-react"
 
-const isCommunity = process.env.NEXT_PUBLIC_EDITION !== "cloud"
+const isCommunity = (process.env.NEXT_PUBLIC_EDITION || "").trim().toLowerCase() !== "cloud"
 
 export default function DashboardLayout({
   children,

@@ -16,19 +16,19 @@ Thank you for considering contributing to S3 Administrator! This document provid
 # Install dependencies
 npm install
 
-# Copy the community environment example
-cp .env.community.example .env
+# Copy the community environment template
+cp .env.community .env
 
 # Start PostgreSQL (via Docker)
-docker compose up db -d
+docker compose --env-file .env -f docker/docker-compose.yml up db -d
 
 # Run database migrations
-npx prisma migrate dev
+npx prisma migrate deploy
 
 # Seed the database
 npx prisma db seed
 
-# Start the development server
+# Start the application
 npm run dev
 ```
 

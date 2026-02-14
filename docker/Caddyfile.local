@@ -1,8 +1,0 @@
-{
-  auto_https off
-}
-
-:80 {
-  encode zstd gzip
-  reverse_proxy app:3000
-}

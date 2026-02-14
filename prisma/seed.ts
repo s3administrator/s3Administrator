@@ -3,13 +3,18 @@ import Stripe from "stripe"
 
 const prisma = new PrismaClient()
 
-const edition = process.env.NEXT_PUBLIC_EDITION || process.env.EDITION || "community"
+const edition = (process.env.NEXT_PUBLIC_EDITION || process.env.EDITION || "community")
+  .trim()
+  .toLowerCase()
 const isCommunity = edition !== "cloud"
 
 function getStripe(): Stripe | null {
-  const key =
-    process.env[`STRIPE_SECRET_KEY_${(process.env.ENVIRONMENT || "DEV").toUpperCase()}`] ||
-    process.env.STRIPE_SECRET_KEY
+  const environment = process.env.ENVIRONMENT?.trim().toUpperCase()
+  if (environment !== "COMMUNITY" && environment !== "CLOUD") {
+    throw new Error('ENVIRONMENT must be set to either "COMMUNITY" or "CLOUD".')
+  }
+
+  const key = process.env[`STRIPE_SECRET_KEY_${environment}`] || process.env.STRIPE_SECRET_KEY
   if (!key) return null
   return new Stripe(key, { apiVersion: "2026-01-28.clover" })
 }

@@ -1,9 +1,8 @@
-{$ROOT_DOMAIN} {
-  redir https://{$DOMAIN}{uri} permanent
-}
-
-{$DOMAIN} {
+{$CADDY_SITE_ADDRESSES::80} {
   encode zstd gzip
+
+  @apex expression {host} == "{$ROOT_DOMAIN}" && "{$ROOT_DOMAIN}" != "" && "{$ROOT_DOMAIN}" != "{$DOMAIN}"
+  redir @apex https://{$DOMAIN}{uri} permanent
 
   header {
     Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"

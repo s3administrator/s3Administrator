@@ -113,7 +113,7 @@ export function Sidebar({
   const [settingsBucket, setSettingsBucket] = useState<Bucket | null>(null)
   const sidebarCollapsed = collapsible && isCollapsed
   const isAdmin = session?.user?.role === "admin"
-  const isCommunity = process.env.NEXT_PUBLIC_EDITION !== "cloud"
+  const isCommunity = (process.env.NEXT_PUBLIC_EDITION || "").trim().toLowerCase() !== "cloud"
   const isOverviewActive =
     pathname === "/dashboard" &&
     !searchParams.get("bucket") &&

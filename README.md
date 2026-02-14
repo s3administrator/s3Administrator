@@ -21,21 +21,22 @@ Open-source S3 file manager for Hetzner, AWS, Cloudflare R2, and any S3-compatib
 git clone https://github.com/YOUR_USERNAME/s3-administrator.git
 cd s3-administrator
 
-# Copy environment file
-cp .env.community.example .env
+# Choose a template and copy to runtime env
+cp .env.community .env
+# or: cp .env.cloud .env
 
-# Fill in the required values in .env:
+# Fill in required values in .env:
 #   - DATABASE_URL
 #   - AUTH_SECRET (generate with: openssl rand -base64 32)
 #   - ENCRYPTION_MASTER_KEY (generate with: openssl rand -hex 32)
 #   - ENCRYPTION_SALT (generate with: openssl rand -hex 16)
 
 # Start with Docker Compose
-docker compose up -d
+docker compose --env-file .env -f docker/docker-compose.yml up -d
 
 # Run database migrations and seed
-docker compose exec app npx prisma migrate deploy
-docker compose exec app npx prisma db seed
+docker compose --env-file .env -f docker/docker-compose.yml exec app npx prisma migrate deploy
+docker compose --env-file .env -f docker/docker-compose.yml exec app npx prisma db seed
 
 # Open http://localhost:3000
 ```
@@ -68,36 +69,61 @@ For multi-user support, audit logs, and managed hosting, see [s3administrator.co
 # Install dependencies
 npm install
 
-# Copy environment file
-cp .env.community.example .env
+# Copy community template to runtime env
+cp .env.community .env
 
 # Start PostgreSQL
-docker compose up db -d
+docker compose --env-file .env -f docker/docker-compose.yml up db -d
 
 # Run migrations and seed
-npx prisma migrate dev
+npx prisma migrate deploy
 npx prisma db seed
 
-# Start dev server
+# Start app
 npm run dev
 ```
 
-## Tech Stack
+## Make Commands
 
-- **Framework**: Next.js 16 (App Router) + React 19 + TypeScript
-- **Database**: PostgreSQL + Prisma 6
-- **UI**: shadcn/ui + Tailwind CSS v4
-- **S3**: @aws-sdk/client-s3
-- **Validation**: Zod v4
+```bash
+# Community profile
+make community-setup
+make community-start
 
-## Environment Selection
+# Cloud profile
+make cloud-setup
+make cloud-start
+make cloud-local
+make cloud-start-prod
 
-Application scripts load env files based on `ENVIRONMENT`:
+# Logs
+make log PROFILE=community
+make log PROFILE=cloud
+```
 
-- `ENVIRONMENT=DEV` -> `.env.dev`
-- `ENVIRONMENT=PROD` -> `.env.prod`
+`cloud-start` runs `app + db + proxy` and always starts Caddy.
+`cloud-start-prod` is a compatibility alias to `cloud-start`.
 
-For the community edition, just use `.env` (copied from `.env.community.example`).
+Caddy now uses a single config file: `docker/Caddyfile`.
+It reads `DOMAIN`, `ROOT_DOMAIN`, and `CADDY_SITE_ADDRESSES` from `.env`.
+
+For local cloud development, keep cloud mode but point URLs to localhost in `.env`:
+
+```bash
+ENVIRONMENT="CLOUD"
+NEXT_PUBLIC_EDITION="cloud"
+AUTH_URL="http://localhost:3000"
+NEXT_PUBLIC_SITE_URL="http://localhost:3000"
+```
+
+## Environment Contract
+
+Application runtime reads only `.env`.
+
+- `ENVIRONMENT` must be `COMMUNITY` or `CLOUD`
+- `envVar("KEY")` lookup order:
+1. `KEY_COMMUNITY` or `KEY_CLOUD` (based on `ENVIRONMENT`)
+2. `KEY` (unsuffixed fallback)
 
 ## Gallery Mode and Video Thumbnails
 

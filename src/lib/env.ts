@@ -1,22 +1,21 @@
+export type Environment = "COMMUNITY" | "CLOUD"
+
 /**
- * Returns the current environment: "DEV" or "PROD".
- * Falls back to "DEV" when not set or when NODE_ENV is "development".
+ * Returns the current environment: "COMMUNITY" or "CLOUD".
+ * Throws when ENVIRONMENT is missing or invalid.
  */
-export function getEnvironment(): "DEV" | "PROD" {
-  const env = process.env.ENVIRONMENT?.toUpperCase()
-  if (env === "PROD") return "PROD"
-  return "DEV"
+export function getEnvironment(): Environment {
+  const env = process.env.ENVIRONMENT?.trim().toUpperCase()
+  if (env === "COMMUNITY" || env === "CLOUD") return env
+  throw new Error('ENVIRONMENT must be set to either "COMMUNITY" or "CLOUD".')
 }
 
 /**
- * Resolves an environment variable with _DEV/_PROD suffix support.
+ * Resolves an environment variable with _COMMUNITY/_CLOUD suffix support.
  *
  * Lookup order:
- *   1. `KEY_DEV` or `KEY_PROD` (based on current ENVIRONMENT)
+ *   1. `KEY_COMMUNITY` or `KEY_CLOUD` (based on current ENVIRONMENT)
  *   2. `KEY` (unsuffixed fallback)
- *
- * This lets you put both dev and prod values in a single .env and
- * switch between them with `ENVIRONMENT=DEV|PROD`.
  */
 export function envVar(key: string): string {
   const suffix = getEnvironment()
