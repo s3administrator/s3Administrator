@@ -54,3 +54,6 @@ infrastructure/
 # The files listed in .s3admin-stubs are auto-generated
 
 .playwright-mcp/
+
+.env.cloud
+.env.community
