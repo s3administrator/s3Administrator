@@ -124,6 +124,33 @@ function subscriptionStatusBadge(status: string, cancelAtPeriodEnd: boolean) {
 }
 
 export default function BillingPage() {
+  const isCommunity = process.env.NEXT_PUBLIC_EDITION !== "cloud"
+
+  if (isCommunity) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-8">
+        <Card className="max-w-md">
+          <CardHeader className="text-center">
+            <CardTitle>Community Edition</CardTitle>
+            <CardDescription>
+              All features are included in the self-hosted community edition.
+              No subscription required.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="space-y-2 text-sm text-muted-foreground">
+              <div className="flex items-center gap-2"><Check className="h-4 w-4 text-green-500" /> Unlimited buckets</div>
+              <div className="flex items-center gap-2"><Check className="h-4 w-4 text-green-500" /> Unlimited cached files</div>
+              <div className="flex items-center gap-2"><Check className="h-4 w-4 text-green-500" /> All file operations</div>
+              <div className="flex items-center gap-2"><Check className="h-4 w-4 text-green-500" /> Background tasks &amp; sync</div>
+              <div className="flex items-center gap-2"><Check className="h-4 w-4 text-green-500" /> Multi-provider support</div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   const queryClient = useQueryClient()
   const [upgrading, setUpgrading] = useState<string | null>(null)
 

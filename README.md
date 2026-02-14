@@ -1,90 +1,113 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# S3 Admin
 
-## Getting Started
+Open-source S3 file manager for Hetzner, AWS, Cloudflare R2, and any S3-compatible storage provider. Browse, upload, download, move, and manage files across multiple buckets and providers from a single dashboard.
 
-First, run the development server:
+## Features
+
+- **File Management** - Browse, upload, download, delete, move, and rename files
+- **Multi-Provider** - Connect to AWS S3, Hetzner Object Storage, Cloudflare R2, or any S3-compatible endpoint
+- **Multi-Bucket** - Manage multiple buckets across multiple credentials
+- **Gallery View** - Visual gallery with image previews and video thumbnail generation
+- **Background Tasks** - Copy, move, sync, and migrate files between buckets
+- **Global Search** - Search across all indexed files and buckets
+- **Folder Operations** - Create folders, recursive delete, batch operations
+- **Encrypted Credentials** - S3 keys are encrypted at rest with AES-256-GCM
+- **Self-Hosted** - Run on your own infrastructure with Docker Compose
+
+## Quick Start
 
 ```bash
+# Clone the repository
+git clone https://github.com/YOUR_USERNAME/s3-admin.git
+cd s3-admin
+
+# Copy environment file
+cp .env.community.example .env
+
+# Fill in the required values in .env:
+#   - DATABASE_URL
+#   - AUTH_SECRET (generate with: openssl rand -base64 32)
+#   - ENCRYPTION_MASTER_KEY (generate with: openssl rand -hex 32)
+#   - ENCRYPTION_SALT (generate with: openssl rand -hex 16)
+
+# Start with Docker Compose
+docker compose up -d
+
+# Run database migrations and seed
+docker compose exec app npx prisma migrate deploy
+docker compose exec app npx prisma db seed
+
+# Open http://localhost:3000
+```
+
+## Community vs Cloud
+
+| Feature | Community (Self-Hosted) | Cloud (s3administrator.com) |
+|---------|:-:|:-:|
+| File browsing & management | Yes | Yes |
+| Multi-provider & multi-bucket | Yes | Yes |
+| Gallery view & thumbnails | Yes | Yes |
+| Background tasks & sync | Yes | Yes |
+| Global file search | Yes | Yes |
+| Folder operations | Yes | Yes |
+| Encrypted credentials | Yes | Yes |
+| **Multi-user auth (OAuth, email)** | - | Yes |
+| **Billing & subscription plans** | - | Yes |
+| **Audit logs** | - | Yes |
+| **Admin panel** | - | Yes |
+| **Managed hosting & updates** | - | Yes |
+| **Support & SLA** | - | Yes |
+
+The community edition is a single-user, no-auth tool designed for personal or internal use. All S3 management features are fully unlocked.
+
+For multi-user support, audit logs, and managed hosting, see [s3administrator.com](https://www.s3administrator.com).
+
+## Development
+
+```bash
+# Install dependencies
+npm install
+
+# Copy environment file
+cp .env.community.example .env
+
+# Start PostgreSQL
+docker compose up db -d
+
+# Run migrations and seed
+npx prisma migrate dev
+npx prisma db seed
+
+# Start dev server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Tech Stack
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **Framework**: Next.js 16 (App Router) + React 19 + TypeScript
+- **Database**: PostgreSQL + Prisma 6
+- **UI**: shadcn/ui + Tailwind CSS v4
+- **S3**: @aws-sdk/client-s3
+- **Validation**: Zod v4
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Environment Selection
 
-## Learn More
+Application scripts load env files based on `ENVIRONMENT`:
 
-To learn more about Next.js, take a look at the following resources:
+- `ENVIRONMENT=DEV` -> `.env.dev`
+- `ENVIRONMENT=PROD` -> `.env.prod`
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-
-## Security Scanning (pre-commit)
-
-This repository includes pre-commit hooks in `.pre-commit-config.yaml`:
-
-- Semgrep (`p/security-audit`)
-- OSV scanner (`package-lock.json`)
-- SonarQube (runs when Sonar env vars are configured)
-
-Setup:
-
-```bash
-pre-commit install
-```
-
-Run on all files:
-
-```bash
-pre-commit run semgrep --all-files
-```
-
-Run SonarQube hook manually:
-
-```bash
-pre-commit run sonarqube --all-files
-```
-
-SonarQube hook env vars:
-
-```bash
-SONAR_HOST_URL=
-SONAR_TOKEN=
-SONAR_PROJECT_KEY=
-# Optional:
-SONAR_ORGANIZATION=
-SONAR_PROJECT_NAME=
-SONAR_SOURCES=src,prisma,scripts
-SONAR_EXCLUSIONS=node_modules/**,.next/**,coverage/**,dist/**,build/**
-```
+For the community edition, just use `.env` (copied from `.env.community.example`).
 
 ## Gallery Mode and Video Thumbnails
 
-The dashboard supports `List` and `Gallery` mode.
+The dashboard supports List and Gallery view modes.
 
-- Gallery uses infinite scrolling and recursive listing under the current prefix.
-- Image previews are loaded from signed S3 URLs.
-- Video thumbnails are generated asynchronously by background tasks.
+- Gallery uses infinite scrolling with recursive listing
+- Image previews loaded from signed S3 URLs
+- Video thumbnails generated asynchronously via ffmpeg
 
-### Required environment variables (thumbnail storage)
-
-Set these in `.env.dev` / `.env.prod`:
+Optional environment variables for thumbnail storage:
 
 ```bash
 THUMBNAIL_S3_ENDPOINT=
@@ -96,38 +119,23 @@ THUMBNAIL_MAX_WIDTH=480
 THUMBNAIL_URL_TTL_SECONDS=3600
 ```
 
-### Runtime requirement
+## Security Scanning (pre-commit)
 
-The production app container installs `ffmpeg` and generates thumbnails in-process with:
+Pre-commit hooks are configured in `.pre-commit-config.yaml`:
 
-- max 2 concurrent ffmpeg jobs per app instance
-- 5 second timeout per thumbnail job
-
-## SEO and Discovery
-
-The app exposes SEO metadata routes:
-
-- `/robots.txt`
-- `/sitemap.xml`
-
-Set canonical host via env:
+- Semgrep (`p/security-audit`)
+- OSV scanner (`package-lock.json`)
+- SonarQube (optional, runs when env vars are set)
 
 ```bash
-NEXT_PUBLIC_SITE_URL=https://www.s3administrator.com
+pre-commit install
+pre-commit run --all-files
 ```
 
-Post-deploy checklist:
+## Contributing
 
-1. Verify the domain in Google Search Console.
-2. Submit `https://www.s3administrator.com/sitemap.xml`.
-3. Confirm `robots.txt` allows public marketing pages and blocks private app/API paths.
-4. Monitor indexing coverage and non-brand query impressions weekly.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-## Environment Selection
+## License
 
-Application scripts load env files based on `ENVIRONMENT`:
-
-- `ENVIRONMENT=DEV` -> `.env.dev`
-- `ENVIRONMENT=PROD` -> `.env.prod`
-
-`DATABASE_URL` is required and the app build/start scripts fail fast when it is missing or empty.
+This project is licensed under the [GNU Affero General Public License v3.0](LICENSE).

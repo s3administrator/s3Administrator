@@ -1,4 +1,5 @@
 import { promises as fs } from "fs"
+import { communityGuard } from "@/lib/api-guard";
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
@@ -107,6 +108,7 @@ function sortLogs(entries: SystemLogEntry[], sortBy: SortField, sortDir: SortDir
 }
 
 export async function GET(req: Request) {
+  const _guard = communityGuard(); if (_guard) return _guard;
   const session = await auth()
   if (!session?.user?.id || session.user.role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })

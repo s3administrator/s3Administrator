@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { communityGuard } from "@/lib/api-guard";
 import { auth } from "@/lib/auth"
 import { stripe } from "@/lib/stripe"
 import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
@@ -8,6 +9,7 @@ export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const _guard = communityGuard(); if (_guard) return _guard;
   const session = await auth()
   if (!session?.user?.id || session.user.role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })

@@ -2,7 +2,7 @@
 
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import { Sidebar } from "@/components/dashboard/sidebar"
 import { Button } from "@/components/ui/button"
 import {
@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/sheet"
 import { Loader2, PanelLeft } from "lucide-react"
 
+const isCommunity = process.env.NEXT_PUBLIC_EDITION !== "cloud"
+
 export default function DashboardLayout({
   children,
 }: {
@@ -22,14 +24,21 @@ export default function DashboardLayout({
   const { status } = useSession()
   const router = useRouter()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
-    if (status === "unauthenticated") {
+    setMounted(true)
+  }, [])
+
+  useEffect(() => {
+    if (!isCommunity && status === "unauthenticated") {
       router.push("/login")
     }
   }, [status, router])
 
-  if (status === "loading") {
+  // In cloud mode, show loading state until client is mounted and session is resolved.
+  // This prevents hydration mismatches between server (no session) and client.
+  if (!isCommunity && (!mounted || status === "loading")) {
     return (
       <div className="flex h-screen items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -37,14 +46,16 @@ export default function DashboardLayout({
     )
   }
 
-  if (status === "unauthenticated") {
+  if (!isCommunity && status === "unauthenticated") {
     return null
   }
 
   return (
     <div className="flex h-screen overflow-hidden">
       <aside className="hidden md:block">
-        <Sidebar />
+        <Suspense>
+          <Sidebar />
+        </Suspense>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <header className="flex h-12 items-center border-b bg-background/95 px-2.5 md:hidden">
@@ -64,7 +75,9 @@ export default function DashboardLayout({
               <SheetDescription className="sr-only">
                 Sidebar navigation and background task shortcuts.
               </SheetDescription>
-              <Sidebar className="w-full border-r-0 lg:w-full" collapsible={false} />
+              <Suspense>
+                <Sidebar className="w-full border-r-0 lg:w-full" collapsible={false} />
+              </Suspense>
             </SheetContent>
           </Sheet>
           <p className="ml-2 text-sm font-semibold">S3 Admin</p>

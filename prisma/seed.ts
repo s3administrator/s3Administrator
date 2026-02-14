@@ -3,12 +3,38 @@ import Stripe from "stripe"
 
 const prisma = new PrismaClient()
 
+const edition = process.env.NEXT_PUBLIC_EDITION || process.env.EDITION || "community"
+const isCommunity = edition !== "cloud"
+
 function getStripe(): Stripe | null {
   const key =
     process.env[`STRIPE_SECRET_KEY_${(process.env.ENVIRONMENT || "DEV").toUpperCase()}`] ||
     process.env.STRIPE_SECRET_KEY
   if (!key) return null
   return new Stripe(key, { apiVersion: "2026-01-28.clover" })
+}
+
+const communityPlan = {
+  slug: "community",
+  name: "Community",
+  priceMonthly: 0,
+  bucketLimit: 1000,
+  fileLimit: 0,
+  recursiveDelete: true,
+  multipleUpload: true,
+  copyFolderToFolder: true,
+  copyBucketToBucket: true,
+  auditLogs: true,
+  searchAllFiles: true,
+  syncTasks: true,
+  thumbnailCache: true,
+  transferTasks: true,
+  features: [
+    "Unlimited buckets",
+    "Unlimited cached files",
+    "All features enabled",
+  ],
+  sortOrder: 0,
 }
 
 const defaultPlans = [
@@ -112,13 +138,15 @@ const defaultPlans = [
 ]
 
 async function main() {
-  const stripe = getStripe()
-  console.log("Seeding default plans...")
-  if (!stripe) {
+  const plans = isCommunity ? [communityPlan] : defaultPlans
+  const stripe = isCommunity ? null : getStripe()
+
+  console.log(`Seeding plans for ${isCommunity ? "community" : "cloud"} edition...`)
+  if (!stripe && !isCommunity) {
     console.log("  STRIPE_SECRET_KEY not set — skipping Stripe price creation")
   }
 
-  for (const plan of defaultPlans) {
+  for (const plan of plans) {
     const existing = await prisma.plan.findUnique({ where: { slug: plan.slug } })
 
     // Create Stripe product+price for paid plans that don't have one yet

@@ -25,12 +25,20 @@ export default function LoginPage() {
   const [authErrorMessage, setAuthErrorMessage] = useState<string | null>(null)
   const { status } = useSession()
   const router = useRouter()
+  const isCommunity = process.env.NEXT_PUBLIC_EDITION !== "cloud"
 
   useEffect(() => {
+    if (isCommunity) {
+      // Auto-sign in for community edition (single-user, no auth)
+      signIn("credentials", { redirect: false }).then(() => {
+        router.replace("/dashboard")
+      })
+      return
+    }
     if (status === "authenticated") {
       router.replace("/dashboard")
     }
-  }, [status, router])
+  }, [status, router, isCommunity])
 
   useEffect(() => {
     const authError = new URLSearchParams(window.location.search).get("error")

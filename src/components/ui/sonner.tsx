@@ -1,5 +1,6 @@
 "use client"
 
+import { useSyncExternalStore } from "react"
 import {
   CircleCheckIcon,
   InfoIcon,
@@ -10,17 +11,25 @@ import {
 import { useTheme } from "next-themes"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 
+const emptySubscribe = () => () => {}
+
 const Toaster = ({ ...props }: ToasterProps) => {
   const { resolvedTheme } = useTheme()
+  const mounted = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false
+  )
 
   return (
     <Sonner
       theme={
-        resolvedTheme === "dark" ||
-        resolvedTheme === "midnight" ||
-        resolvedTheme === "graphite" ||
-        resolvedTheme === "graphite-bright" ||
-        resolvedTheme === "graphite-plus"
+        mounted &&
+        (resolvedTheme === "dark" ||
+          resolvedTheme === "midnight" ||
+          resolvedTheme === "graphite" ||
+          resolvedTheme === "graphite-bright" ||
+          resolvedTheme === "graphite-plus")
           ? "dark"
           : "light"
       }

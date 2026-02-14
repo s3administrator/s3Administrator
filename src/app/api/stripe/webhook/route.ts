@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { communityGuard } from "@/lib/api-guard";
 import { stripe } from "@/lib/stripe"
 import { prisma } from "@/lib/db"
 import { enforceThumbnailCachePolicyForUser } from "@/lib/thumbnail-cache-policy"
@@ -21,6 +22,7 @@ async function deactivateOtherActiveSubscriptions(userId: string, keepStripeSubs
 }
 
 export async function POST(req: NextRequest) {
+  const _guard = communityGuard(); if (_guard) return _guard;
   const body = await req.text()
   const signature = req.headers.get("stripe-signature")
 

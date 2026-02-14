@@ -46,3 +46,8 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+
+# premium packages (private — not included in open-source repo)
+/packages/
+/logs
+/infrastructure/**

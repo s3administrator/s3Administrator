@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { communityGuard } from "@/lib/api-guard";
 import type { Prisma } from "@prisma/client"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/db"
@@ -73,6 +74,7 @@ function getOrderBy(
 }
 
 export async function GET(req: Request) {
+  const _guard = communityGuard(); if (_guard) return _guard;
   const session = await auth()
   const userId = session?.user?.id
 

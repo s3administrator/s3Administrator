@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server"
+import { communityGuard } from "@/lib/api-guard";
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/db"
 import { stripe } from "@/lib/stripe"
 import { absoluteUrl } from "@/lib/site-url"
 
 export async function POST() {
+  const _guard = communityGuard(); if (_guard) return _guard;
   const session = await auth()
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

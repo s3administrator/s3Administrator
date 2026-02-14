@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db"
+import { isCommunityEdition } from "@/lib/edition"
 import type { Prisma } from "@prisma/client"
 
 type AuditLogInput = {
@@ -32,6 +33,8 @@ export function getRequestContext(request: Request) {
 }
 
 export async function logUserAuditAction(input: AuditLogInput) {
+  if (isCommunityEdition()) return
+
   try {
     await prisma.userActionEvent.create({
       data: {

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { communityGuard } from "@/lib/api-guard";
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/db"
 import { stripe } from "@/lib/stripe"
@@ -25,6 +26,7 @@ const createPlanSchema = z.object({
 })
 
 export async function GET() {
+  const _guard = communityGuard(); if (_guard) return _guard;
   const session = await auth()
   if (!session?.user?.id || session.user.role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
@@ -42,6 +44,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const _guard = communityGuard(); if (_guard) return _guard;
   const session = await auth()
   if (!session?.user?.id || session.user.role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })

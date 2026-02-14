@@ -1,7 +1,12 @@
 import Stripe from "stripe"
+import { isCommunityEdition } from "@/lib/edition"
 import { envVar } from "@/lib/env"
 
 function getStripeClient() {
+  if (isCommunityEdition()) {
+    throw new Error("Stripe is not available in community edition")
+  }
+
   const key = envVar("STRIPE_SECRET_KEY")
   if (!key) {
     throw new Error("STRIPE_SECRET_KEY is not configured")

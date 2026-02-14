@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
+import { communityGuard } from "@/lib/api-guard";
 import { prisma } from "@/lib/db"
 import { stripe } from "@/lib/stripe"
 import { rateLimitByIp, rateLimitResponse } from "@/lib/rate-limit"
 import { absoluteUrl } from "@/lib/site-url"
 
 export async function POST(req: NextRequest) {
+  const _guard = communityGuard(); if (_guard) return _guard;
   const rl = rateLimitByIp(req, "guest-checkout", 3)
   if (!rl.success) return rateLimitResponse(rl.retryAfterSeconds)
 

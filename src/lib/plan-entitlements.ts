@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db"
+import { isCommunityEdition } from "@/lib/edition"
 import { ACTIVE_SUBSCRIPTION_STATUSES } from "@/lib/subscription-status"
 import { TIER_LIMITS } from "@/lib/tiers"
 
@@ -107,6 +108,24 @@ async function findPlanBySlug(slug: string): Promise<PlanSnapshot | null> {
 }
 
 export async function getUserPlanEntitlements(userId: string): Promise<PlanEntitlements | null> {
+  if (isCommunityEdition()) {
+    return {
+      slug: "community",
+      source: "default",
+      bucketLimit: MAX_BUCKET_LIMIT,
+      fileLimit: Number.POSITIVE_INFINITY,
+      thumbnailCache: true,
+      transferTasks: true,
+      recursiveDelete: true,
+      multipleUpload: true,
+      copyFolderToFolder: true,
+      copyBucketToBucket: true,
+      auditLogs: true,
+      searchAllFiles: true,
+      syncTasks: true,
+    }
+  }
+
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {

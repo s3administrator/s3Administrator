@@ -113,6 +113,7 @@ export function Sidebar({
   const [settingsBucket, setSettingsBucket] = useState<Bucket | null>(null)
   const sidebarCollapsed = collapsible && isCollapsed
   const isAdmin = session?.user?.role === "admin"
+  const isCommunity = process.env.NEXT_PUBLIC_EDITION !== "cloud"
   const isOverviewActive =
     pathname === "/dashboard" &&
     !searchParams.get("bucket") &&
@@ -373,16 +374,18 @@ export function Sidebar({
               >
                 <HardDrive className="h-4 w-4" />
               </Link>
-              <Link
-                href="/audit-logs"
-                title="Audit Logs"
-                className={cn(
-                  "flex justify-center rounded-md px-2 py-2 hover:bg-accent",
-                  pathname === "/audit-logs" && "bg-accent"
-                )}
-              >
-                <Activity className="h-4 w-4" />
-              </Link>
+              {!isCommunity && (
+                <Link
+                  href="/audit-logs"
+                  title="Audit Logs"
+                  className={cn(
+                    "flex justify-center rounded-md px-2 py-2 hover:bg-accent",
+                    pathname === "/audit-logs" && "bg-accent"
+                  )}
+                >
+                  <Activity className="h-4 w-4" />
+                </Link>
+              )}
               <Link
                 href="/dashboard/tasks"
                 title="Tasks"
@@ -393,7 +396,7 @@ export function Sidebar({
               >
                 <ListTodo className="h-4 w-4" />
               </Link>
-              {isAdmin && (
+              {!isCommunity && isAdmin && (
                 <Link
                   href="/admin"
                   title="Admin"
@@ -415,20 +418,22 @@ export function Sidebar({
               >
                 <Settings className="h-4 w-4" />
               </Link>
-              <Link
-                href="/billing"
-                title="Billing"
-                className={cn(
-                  "flex justify-center rounded-md px-2 py-2 hover:bg-accent",
-                  pathname === "/billing" && "bg-accent"
-                )}
-              >
-                <CreditCard className="h-4 w-4" />
-              </Link>
+              {!isCommunity && (
+                <Link
+                  href="/billing"
+                  title="Billing"
+                  className={cn(
+                    "flex justify-center rounded-md px-2 py-2 hover:bg-accent",
+                    pathname === "/billing" && "bg-accent"
+                  )}
+                >
+                  <CreditCard className="h-4 w-4" />
+                </Link>
+              )}
             </div>
           </div>
         ) : (
-          <ScrollArea className="flex-1 px-2.5 py-2.5 sm:px-3 sm:py-3">
+          <ScrollArea className="min-h-0 flex-1 px-2.5 py-2.5 sm:px-3 sm:py-3">
             <div className="mb-4 space-y-2">
               <div className="flex items-center justify-between px-2">
                 <p className="text-xs font-medium text-muted-foreground">Buckets</p>
@@ -608,19 +613,21 @@ export function Sidebar({
             <div className="flex justify-center pb-1">
               <ThemeSwitcher />
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              title="Sign Out"
-              className="h-8 w-full justify-center px-2"
-              onClick={() => signOut({ callbackUrl: "/" })}
-            >
-              <LogOut className="h-4 w-4" />
-              <span className="sr-only">Sign Out</span>
-            </Button>
+            {!isCommunity && (
+              <Button
+                variant="ghost"
+                size="sm"
+                title="Sign Out"
+                className="h-8 w-full justify-center px-2"
+                onClick={() => signOut({ callbackUrl: "/" })}
+              >
+                <LogOut className="h-4 w-4" />
+                <span className="sr-only">Sign Out</span>
+              </Button>
+            )}
           </div>
         ) : (
-          <div className="space-y-0.5 p-2 pb-16 sm:space-y-1 sm:p-3">
+          <div className="shrink-0 space-y-0.5 p-2 pb-4 sm:space-y-1 sm:p-3">
             <Link
               href="/dashboard"
               className={cn(
@@ -654,16 +661,18 @@ export function Sidebar({
               Buckets
             </Link>
 
-            <Link
-              href="/audit-logs"
-              className={cn(
-                "flex items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-accent sm:py-1.5 sm:text-sm",
-                pathname === "/audit-logs" && "bg-accent"
-              )}
-            >
-              <Activity className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              Audit Logs
-            </Link>
+            {!isCommunity && (
+              <Link
+                href="/audit-logs"
+                className={cn(
+                  "flex items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-accent sm:py-1.5 sm:text-sm",
+                  pathname === "/audit-logs" && "bg-accent"
+                )}
+              >
+                <Activity className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                Audit Logs
+              </Link>
+            )}
 
             <Link
               href="/dashboard/tasks"
@@ -676,43 +685,7 @@ export function Sidebar({
               Tasks
             </Link>
 
-            <div className="rounded-md border p-1 sm:p-2">
-              <div className="mb-1 flex items-center justify-between sm:mb-2">
-                <p className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground sm:text-xs">
-                  <ListTodo className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                  Tasks
-                </p>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-5 px-1.5 text-[10px] leading-none sm:h-6 sm:px-2 sm:text-xs"
-                  onClick={() => {
-                    void processTaskQueue()
-                    queryClient.invalidateQueries({ queryKey: ["background-tasks"] })
-                  }}
-                >
-                  Poll
-                </Button>
-              </div>
-              {tasks.length === 0 ? (
-                <p className="px-1 text-[10px] text-muted-foreground sm:text-xs">No ongoing tasks</p>
-              ) : (
-                <div className="space-y-1.5">
-                  {tasks.map((task) => (
-                    <Link
-                      key={task.id}
-                      href="/dashboard/tasks"
-                      className="block rounded-sm bg-muted/40 px-1.5 py-1 text-[10px] font-medium leading-4 hover:bg-muted/60 sm:px-2 sm:py-1.5 sm:text-xs"
-                      title={task.title}
-                    >
-                      <span className="line-clamp-2">{task.title}</span>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
-            {isAdmin && (
+            {!isCommunity && isAdmin && (
               <Link
                 href="/admin"
                 className={cn(
@@ -734,25 +707,29 @@ export function Sidebar({
               <Settings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               Settings
             </Link>
-            <Link
-              href="/billing"
-              className={cn(
-                "flex items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-accent sm:py-1.5 sm:text-sm",
-                pathname === "/billing" && "bg-accent"
-              )}
-            >
-              <CreditCard className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              Billing
-            </Link>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 w-full justify-start gap-2 px-2 text-xs sm:h-9 sm:text-sm"
-              onClick={() => signOut({ callbackUrl: "/" })}
-            >
-              <LogOut className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              Sign Out
-            </Button>
+            {!isCommunity && (
+              <Link
+                href="/billing"
+                className={cn(
+                  "flex items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-accent sm:py-1.5 sm:text-sm",
+                  pathname === "/billing" && "bg-accent"
+                )}
+              >
+                <CreditCard className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                Billing
+              </Link>
+            )}
+            {!isCommunity && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-full justify-start gap-2 px-2 text-xs sm:h-9 sm:text-sm"
+                onClick={() => signOut({ callbackUrl: "/" })}
+              >
+                <LogOut className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                Sign Out
+              </Button>
+            )}
           </div>
         )}
       </div>

@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth"
+import { isCommunityEdition } from "@/lib/edition"
 import { NextResponse } from "next/server"
 import { logSystemEvent } from "@/lib/system-logger"
 
@@ -15,7 +16,8 @@ function shouldLogApiRequest(pathname: string) {
   return true
 }
 
-export default auth((req) => {
+// In community mode, skip all auth checks — single-user, no login required.
+const cloudMiddleware = auth((req) => {
   const { pathname } = req.nextUrl
   const isPublicAnalyticsEndpoint = pathname === "/api/analytics/events"
 
@@ -69,6 +71,10 @@ export default auth((req) => {
 
   return NextResponse.next()
 })
+
+export default isCommunityEdition()
+  ? () => NextResponse.next()
+  : cloudMiddleware
 
 export const config = {
   matcher: [

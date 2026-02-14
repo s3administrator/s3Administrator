@@ -22,14 +22,23 @@ export default function AdminLayout({
   const { data: session, status } = useSession()
   const router = useRouter()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const isCommunity = process.env.NEXT_PUBLIC_EDITION !== "cloud"
 
   useEffect(() => {
+    if (isCommunity) {
+      router.push("/dashboard")
+      return
+    }
     if (status === "unauthenticated") {
       router.push("/login")
     } else if (status === "authenticated" && session?.user?.role !== "admin") {
       router.push("/dashboard")
     }
-  }, [status, session, router])
+  }, [status, session, router, isCommunity])
+
+  if (isCommunity) {
+    return null
+  }
 
   if (status === "loading") {
     return (

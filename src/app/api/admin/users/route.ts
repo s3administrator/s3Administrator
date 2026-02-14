@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server"
+import { communityGuard } from "@/lib/api-guard";
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/db"
 import { rateLimitByUser, rateLimitResponse } from "@/lib/rate-limit"
 import { ACTIVE_SUBSCRIPTION_STATUSES } from "@/lib/subscription-status"
 
 export async function GET(req: Request) {
+  const _guard = communityGuard(); if (_guard) return _guard;
   const session = await auth()
   if (!session?.user?.id || session.user.role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
