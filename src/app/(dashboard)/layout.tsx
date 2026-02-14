@@ -80,7 +80,7 @@ export default function DashboardLayout({
               </Suspense>
             </SheetContent>
           </Sheet>
-          <p className="ml-2 text-sm font-semibold">S3 Admin</p>
+          <p className="ml-2 text-sm font-semibold">S3 Administrator</p>
         </header>
         <main className="flex-1 overflow-auto">{children}</main>
       </div>

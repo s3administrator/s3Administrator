@@ -1,6 +1,6 @@
-# Contributing to S3 Admin
+# Contributing to S3 Administrator
 
-Thank you for considering contributing to S3 Admin! This document provides guidelines for contributing to the project.
+Thank you for considering contributing to S3 Administrator! This document provides guidelines for contributing to the project.
 
 ## Getting Started
 

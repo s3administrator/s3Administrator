@@ -1,4 +1,4 @@
-# S3 Admin
+# S3 Administrator
 
 Open-source S3 file manager for Hetzner, AWS, Cloudflare R2, and any S3-compatible storage provider. Browse, upload, download, move, and manage files across multiple buckets and providers from a single dashboard.
 
@@ -18,8 +18,8 @@ Open-source S3 file manager for Hetzner, AWS, Cloudflare R2, and any S3-compatib
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/s3-admin.git
-cd s3-admin
+git clone https://github.com/YOUR_USERNAME/s3-administrator.git
+cd s3-administrator
 
 # Copy environment file
 cp .env.community.example .env

@@ -307,7 +307,7 @@ export function Sidebar({
             )}
           >
             <Database className="h-5 w-5" />
-            {!sidebarCollapsed && <span>S3 Admin</span>}
+            {!sidebarCollapsed && <span>S3 Administrator</span>}
           </Link>
           {sidebarCollapsed ? (
             collapsible && (

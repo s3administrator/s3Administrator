@@ -75,7 +75,7 @@ export function SeoLandingPage({ page }: { page: SeoLandingPageConfig }) {
         </div>
 
         <div className="rounded-xl border bg-card p-6">
-          <h2 className="text-xl font-semibold">How S3 Admin helps</h2>
+          <h2 className="text-xl font-semibold">How S3 Administrator helps</h2>
           <ul className="mt-4 space-y-3 text-sm text-muted-foreground">
             {page.solutionPoints.map((point) => (
               <li key={point} className="flex items-start gap-2">
