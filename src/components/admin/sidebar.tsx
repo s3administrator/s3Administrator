@@ -51,7 +51,7 @@ export function AdminSidebar({
   return (
     <div
       className={cn(
-        "flex h-full min-h-0 shrink-0 flex-col border-r bg-muted/30 transition-[width] duration-200",
+        "relative z-50 flex h-full min-h-0 shrink-0 flex-col border-r bg-muted/30 transition-[width] duration-200",
         sidebarCollapsed ? "w-20 lg:w-20" : "w-80 lg:w-96",
         className
       )}

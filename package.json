@@ -36,11 +36,12 @@
     "zod": "^4.3.6"
   },
   "optionalDependencies": {
-    "@s3administrator/auth": "^1.0.0",
-    "@s3administrator/billing": "^1.0.0",
-    "@s3administrator/admin": "^1.0.0",
-    "@s3administrator/audit": "^1.0.0",
-    "@s3administrator/marketing": "^1.0.0"
+    "@s3administrator/admin": "^1.1.1",
+    "@s3administrator/audit": "^1.1.0",
+    "@s3administrator/auth": "^1.1.0",
+    "@s3administrator/billing": "^1.1.0",
+    "@s3administrator/marketing": "^1.1.0",
+    "@s3administrator/setup": "^1.0.2"
   },
   "prisma": {
     "seed": "npx --no-install tsx prisma/seed.ts"
