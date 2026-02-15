@@ -1,11 +1,32 @@
 FROM node:22-alpine AS deps
 WORKDIR /app
+ARG ENVIRONMENT=COMMUNITY
 ARG NPM_TOKEN=""
 COPY package.json package-lock.json .npmrc ./
-RUN if [ -n "$NPM_TOKEN" ]; then \
+RUN set -e; \
+    env_upper="$(printf '%s' "$ENVIRONMENT" | tr '[:lower:]' '[:upper:]')"; \
+    if [ -n "$NPM_TOKEN" ]; then \
       echo "//npm.pkg.github.com/:_authToken=${NPM_TOKEN}" >> .npmrc; \
-    fi && \
-    npm ci && \
+    fi; \
+    npm ci; \
+    if [ "$env_upper" = "COMMUNITY" ]; then \
+      npm install --no-save --no-package-lock "@s3administrator/community-setup@^1.0.0" || \
+      npm install --no-save --no-package-lock "https://codeload.github.com/s3administrator/community-setup/tar.gz/refs/heads/main"; \
+    fi; \
+    if [ "$env_upper" = "CLOUD" ]; then \
+      if [ -z "$NPM_TOKEN" ]; then \
+        echo "NPM_TOKEN is required for CLOUD builds."; \
+        exit 1; \
+      fi; \
+      echo "@s3administrator:registry=https://npm.pkg.github.com" >> .npmrc; \
+      npm install --no-save --no-package-lock \
+        "@s3administrator/admin@^1.1.1" \
+        "@s3administrator/audit@^1.1.0" \
+        "@s3administrator/auth@^1.1.0" \
+        "@s3administrator/billing@^1.1.0" \
+        "@s3administrator/marketing@^1.1.0" \
+        "@s3administrator/setup@^1.0.2"; \
+    fi; \
     rm -f .npmrc
 
 FROM node:22-alpine AS builder

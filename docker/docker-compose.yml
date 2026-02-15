@@ -58,6 +58,7 @@ services:
       dockerfile: docker/Dockerfile
       target: tools
       args:
+        ENVIRONMENT: ${ENVIRONMENT:-COMMUNITY}
         NPM_TOKEN: ${NPM_TOKEN:-}
     environment:
       - ENVIRONMENT=${ENVIRONMENT:-COMMUNITY}

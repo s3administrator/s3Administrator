@@ -4,6 +4,7 @@ import { resolve } from "node:path"
 import { spawn } from "node:child_process"
 import { createRequire } from "node:module"
 import dotenv from "dotenv"
+import { ensureEditionStubs } from "./ensure-edition-stubs.mjs"
 
 const [nextCommand = "dev", ...nextArgs] = process.argv.slice(2)
 
@@ -26,6 +27,13 @@ if (existsSync(envPath)) {
 const environment = process.env.ENVIRONMENT?.trim().toUpperCase()
 if (environment !== "COMMUNITY" && environment !== "CLOUD") {
   console.error('ENVIRONMENT must be set to either "COMMUNITY" or "CLOUD".')
+  process.exit(1)
+}
+
+try {
+  ensureEditionStubs(environment)
+} catch (error) {
+  console.error("Failed to prepare edition stubs.", error)
   process.exit(1)
 }
 
