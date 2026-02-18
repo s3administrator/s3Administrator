@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/db"
-import { getTaskMaxActivePerUser, getTaskWorkerScanIntervalSeconds } from "@/lib/task-engine-config"
+import { getTaskMaxActivePerUser, getTaskWorkerScanIntervalSeconds, type TaskTypeName } from "@/lib/task-engine-config"
 const PORT = process.env.PORT || "3000"
 
 const TASK_TYPES = ["bulk_delete", "object_transfer", "thumbnail_generate"] as const
@@ -53,8 +53,6 @@ async function tick() {
     const dueRows = await findDueUserTypes()
     if (dueRows.length === 0) return
 
-    const concurrency = getTaskMaxActivePerUser()
-
     // Group by user -> set of types with due work
     const userTypes = new Map<string, Set<string>>()
     for (const row of dueRows) {
@@ -75,6 +73,7 @@ async function tick() {
       while (activeTypes.size > 0) {
         for (const type of TASK_TYPES) {
           if (!activeTypes.has(type)) continue
+          const concurrency = getTaskMaxActivePerUser(type as TaskTypeName)
           const didWork = await processBurst(userId, type, concurrency)
           if (!didWork) {
             activeTypes.delete(type)

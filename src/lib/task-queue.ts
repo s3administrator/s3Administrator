@@ -7,6 +7,7 @@ import {
   getTaskWorkerScanIntervalSeconds,
   getTaskWorkerUserBudgetMs,
   getTaskWorkerUserBurst,
+  type TaskTypeName,
 } from "@/lib/task-engine-config"
 
 type BossJob<T = unknown> = {
@@ -128,8 +129,9 @@ async function processUserTypeBurst(
   type: string,
   processUserOnce: (userId: string, type?: string) => Promise<ProcessUserResult>
 ): Promise<number> {
-  const budgetMs = getTaskWorkerUserBudgetMs()
-  const maxBurst = getTaskWorkerUserBurst()
+  const taskType = type as TaskTypeName | undefined
+  const budgetMs = getTaskWorkerUserBudgetMs(taskType)
+  const maxBurst = getTaskWorkerUserBurst(taskType)
   const startedAt = Date.now()
   let processed = 0
 

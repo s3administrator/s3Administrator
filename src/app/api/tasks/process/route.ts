@@ -39,7 +39,9 @@ import {
   getTaskEngineInternalToken,
   getTaskMaxActivePerUser,
   getTaskMissedScheduleGraceSeconds,
+  getTaskTransferChunkSize,
   getTaskWorkerUserBudgetMs,
+  type TaskTypeName,
 } from "@/lib/task-engine-config"
 import {
   appendExecutionHistory,
@@ -57,7 +59,6 @@ export const runtime = "nodejs"
 export const maxDuration = 60
 
 const CHUNK_SIZE = 500
-const TRANSFER_CHUNK_SIZE = 50
 const LOCK_SECONDS = 45
 const THUMBNAIL_TIMEOUT_MS = 5_000
 const SYNC_POLL_INTERVAL_SECONDS = 60
@@ -754,8 +755,9 @@ interface SyncDestinationDriftRow {
 async function findSyncDestinationDriftBatch(params: {
   userId: string
   payload: ObjectTransferTaskPayload
+  chunkSize: number
 }): Promise<SyncDestinationDriftRow[]> {
-  const { userId, payload } = params
+  const { userId, payload, chunkSize } = params
 
   if (payload.scope === "bucket") {
     return prisma.$queryRaw<SyncDestinationDriftRow[]>(Prisma.sql`
@@ -775,7 +777,7 @@ async function findSyncDestinationDriftBatch(params: {
             AND s."key" = d."key"
         )
       ORDER BY d."key" ASC
-      LIMIT ${TRANSFER_CHUNK_SIZE}
+      LIMIT ${chunkSize}
     `)
   }
 
@@ -802,7 +804,7 @@ async function findSyncDestinationDriftBatch(params: {
           AND s."key" = ${sourcePrefix} || substring(d."key" from ${substringStart})
       )
     ORDER BY d."key" ASC
-    LIMIT ${TRANSFER_CHUNK_SIZE}
+    LIMIT ${chunkSize}
   `)
 }
 
@@ -816,7 +818,7 @@ async function cleanupSyncDestinationDrift(params: {
   let failed = 0
 
   while (true) {
-    const driftRows = await findSyncDestinationDriftBatch({ userId, payload })
+    const driftRows = await findSyncDestinationDriftBatch({ userId, payload, chunkSize: getTaskTransferChunkSize() })
     if (driftRows.length === 0) {
       break
     }
@@ -897,14 +899,6 @@ export async function POST(request: Request) {
       : [...TASK_TYPES]
 
     const now = new Date()
-    const maxActive = getTaskMaxActivePerUser()
-
-    // Per-type concurrency: each type gets a reserved share of the total slots
-    // so one type (e.g. thumbnail_generate) can never starve another (e.g. object_transfer).
-    // Reserved slots = floor(maxActive / number_of_types), minimum 1.
-    // Remaining slots are available to any type on a first-come basis.
-    const typeCount = TASK_TYPES.length
-    const reservedPerType = Math.max(1, Math.floor(maxActive / typeCount))
 
     const lockedByType = await prisma.backgroundTask.groupBy({
       by: ["type"],
@@ -919,15 +913,28 @@ export async function POST(request: Request) {
 
     const lockedCounts = new Map(lockedByType.map((r) => [r.type, r._count._all]))
     const totalLocked = lockedByType.reduce((sum, r) => sum + r._count._all, 0)
-    const requestedTypeName = typeFilter.length === 1 ? typeFilter[0] : null
-    const lockedForRequestedType = requestedTypeName ? (lockedCounts.get(requestedTypeName) ?? 0) : totalLocked
+    const requestedTypeName = typeFilter.length === 1 ? typeFilter[0] as TaskTypeName : null
 
-    // Block if: this type already used its reserved slots AND overall limit is reached
-    if (totalLocked >= maxActive && lockedForRequestedType >= reservedPerType) {
-      return NextResponse.json({
-        processed: false,
-        message: "Task concurrency limit reached for user",
-      })
+    if (requestedTypeName) {
+      const maxForType = getTaskMaxActivePerUser(requestedTypeName)
+      const lockedForType = lockedCounts.get(requestedTypeName) ?? 0
+      if (lockedForType >= maxForType) {
+        return NextResponse.json({
+          processed: false,
+          message: "Task concurrency limit reached for user",
+        })
+      }
+    } else {
+      const totalMax = TASK_TYPES.reduce(
+        (sum, t) => sum + getTaskMaxActivePerUser(t as TaskTypeName),
+        0,
+      )
+      if (totalLocked >= totalMax) {
+        return NextResponse.json({
+          processed: false,
+          message: "Task concurrency limit reached for user",
+        })
+      }
     }
 
     const staleScheduleGraceMs = getTaskMissedScheduleGraceSeconds() * 1000
@@ -1626,7 +1633,7 @@ export async function POST(request: Request) {
           ...(Object.keys(sourceKeyFilter).length > 0 ? { key: sourceKeyFilter } : {}),
         },
         orderBy: { key: "asc" },
-        take: TRANSFER_CHUNK_SIZE,
+        take: getTaskTransferChunkSize(),
         select: {
           id: true,
           key: true,
@@ -1895,7 +1902,7 @@ export async function POST(request: Request) {
         // instead of hitting function/request time limits.
         if (
           processedInBatch > 0 &&
-          Date.now() - batchStartedAt >= getTaskWorkerUserBudgetMs()
+          Date.now() - batchStartedAt >= getTaskWorkerUserBudgetMs("object_transfer")
         ) {
           timeBudgetReached = true
           break
