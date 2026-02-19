@@ -1,4 +1,6 @@
 import { Prisma, PrismaClient } from "@prisma/client"
+import { PrismaPg } from "@prisma/adapter-pg"
+import pg from "pg"
 import { logSystemEvent } from "@/lib/system-logger"
 
 const globalForPrisma = globalThis as unknown as {
@@ -6,7 +8,17 @@ const globalForPrisma = globalThis as unknown as {
 }
 
 function createPrismaClient() {
+  const databaseUrl = process.env.DATABASE_URL
+  
+  if (!databaseUrl) {
+    throw new Error("DATABASE_URL environment variable is not set. Please configure it to connect to PostgreSQL.")
+  }
+  
+  const pool = new pg.Pool({ connectionString: databaseUrl })
+  const adapter = new PrismaPg(pool)
+  
   const client = new PrismaClient({
+    adapter,
     log: [
       { emit: "event", level: "warn" },
       { emit: "event", level: "error" },
