@@ -12,7 +12,7 @@
  */
 import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
-import { Client } from "../node_modules/@types/pg"
+import { Client } from "pg"
 
 const migrationsDir = join(__dirname, "migrations")
 

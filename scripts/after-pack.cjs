@@ -11,7 +11,7 @@
  * recursive copy that preserves the symlinks and their targets intact.
  */
 const path = require("node:path")
-const { existsSync, rmSync, cpSync } = require("node:fs")
+const { existsSync, rmSync, cpSync, readdirSync, statSync } = require("node:fs")
 
 exports.default = async function afterPack(context) {
   if (context.electronPlatformName !== "darwin") return
@@ -40,4 +40,24 @@ exports.default = async function afterPack(context) {
   // relative ones resolve correctly inside the copied tree.
   cpSync(src, dest, { recursive: true, verbatimSymlinks: true })
   console.log(`  • afterPack: copied .next/standalone bundle into ${path.relative(projectDir, dest)}`)
+
+  // Prisma bundles a query-compiler WASM blob for every datasource it supports
+  // (postgresql, mysql, sqlite, sqlserver, cockroachdb) in both .js and .mjs.
+  // This app only talks to PostgreSQL, so the other four are dead weight (~38 MB).
+  // Drop them; keep both module formats of postgresql so we don't have to guess
+  // whether the runtime loads CJS or ESM.
+  const prismaRuntime = path.join(dest, "node_modules", "@prisma", "client", "runtime")
+  if (existsSync(prismaRuntime)) {
+    let removed = 0
+    let freed = 0
+    for (const f of readdirSync(prismaRuntime)) {
+      if (f.startsWith("query_compiler_fast_bg.") && !f.includes("postgresql")) {
+        const p = path.join(prismaRuntime, f)
+        freed += statSync(p).size
+        rmSync(p, { force: true })
+        removed++
+      }
+    }
+    console.log(`  • afterPack: pruned ${removed} non-postgresql Prisma query compilers (${(freed / 1048576).toFixed(0)} MB)`)
+  }
 }

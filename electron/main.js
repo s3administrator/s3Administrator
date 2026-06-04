@@ -19,6 +19,30 @@ let nextProc = null
 let workerProc = null
 let nextPort = 0
 
+// On macOS a child that runs the MAIN app binary (process.execPath) registers a
+// second Dock tile against the main bundle's "Regular" activation policy — even
+// with ELECTRON_RUN_AS_NODE (which on recent macOS no longer suppresses it).
+// Running the same Node workload via the bundled "<Product> Helper.app" (whose
+// Info.plist is LSUIElement) keeps the identical Node runtime — native modules
+// (sharp/pg) still load, so behavior is unchanged — but the responsible bundle
+// is an accessory, so no extra Dock icon appears. Falls back to the main binary
+// in dev or if the helper is missing.
+function nodeChildBin() {
+  if (isDev || process.platform !== "darwin") return process.execPath
+  const productName = path.basename(process.execPath) // e.g. "S3 Administrator"
+  const helper = path.join(
+    path.dirname(process.execPath),
+    "..",
+    "Frameworks",
+    `${productName} Helper.app`,
+    "Contents",
+    "MacOS",
+    `${productName} Helper`
+  )
+  return fs.existsSync(helper) ? helper : process.execPath
+}
+const childBin = nodeChildBin()
+
 function findFreePort() {
   return new Promise((resolve, reject) => {
     const server = net.createServer()
@@ -122,7 +146,7 @@ async function applySchema(databaseUrl) {
     : [path.join(appRoot, ".next", "standalone", "migrate.js"), []]
 
   await new Promise((resolve, reject) => {
-    const proc = spawn(process.execPath, [bin, ...args], { cwd: appRoot, env, stdio: "inherit" })
+    const proc = spawn(childBin, [bin, ...args], { cwd: appRoot, env, stdio: "inherit" })
     proc.on("error", reject)
     proc.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`schema apply exited ${code}`))))
   })
@@ -134,7 +158,7 @@ async function startNextServer(databaseUrl) {
   if (isDev) {
     // In dev mode, run `next dev` against the source.
     const nextBin = path.join(appRoot, "node_modules", "next", "dist", "bin", "next")
-    nextProc = spawn(process.execPath, [nextBin, "dev", "--port", String(nextPort)], {
+    nextProc = spawn(childBin, [nextBin, "dev", "--port", String(nextPort)], {
       cwd: appRoot,
       env: {
         ...process.env,
@@ -150,7 +174,7 @@ async function startNextServer(databaseUrl) {
   } else {
     // In packaged mode, run the standalone server bundle.
     const standaloneEntry = path.join(appRoot, ".next", "standalone", "server.js")
-    nextProc = spawn(process.execPath, [standaloneEntry], {
+    nextProc = spawn(childBin, [standaloneEntry], {
       cwd: path.dirname(standaloneEntry),
       env: {
         ...process.env,
@@ -195,7 +219,7 @@ async function startWorker(databaseUrl) {
         ENCRYPTION_SALT: secrets.encryptionSalt,
         ELECTRON_RUN_AS_NODE: "1",
       },
-      execPath: process.execPath,
+      execPath: childBin,
       stdio: "inherit",
     })
   } else {
@@ -210,7 +234,7 @@ async function startWorker(databaseUrl) {
         ENCRYPTION_SALT: secrets.encryptionSalt,
         ELECTRON_RUN_AS_NODE: "1",
       },
-      execPath: process.execPath,
+      execPath: childBin,
       stdio: "inherit",
     })
   }
