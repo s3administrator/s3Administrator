@@ -1,0 +1,65 @@
+appId: com.s3administrator.desktop
+productName: S3 Administrator
+copyright: © 2026 S3 Administrator
+
+directories:
+  output: release
+  buildResources: build
+
+# asar is disabled on purpose: the app forks the Next standalone server, the
+# task worker, the migration runner, and the embedded PostgreSQL binaries as
+# child processes via process.execPath. Plain files on disk avoid the asar
+# child-process / native-binary resolution problems entirely.
+asar: false
+
+# Native modules (sharp, pg, the embedded-postgres binaries) run inside
+# ELECTRON_RUN_AS_NODE child processes — i.e. under the Node ABI, not Electron's
+# native-addon ABI. Rebuilding them against Electron would break those workers.
+npmRebuild: false
+
+# `files` is just the Electron shell. The only production dependency in
+# package.json is embedded-postgres, so electron-builder's dependency walker
+# copies *only* that (+ its arm64 binaries) into Resources/app/node_modules —
+# which is exactly what the main process loads.
+files:
+  - electron/**/*
+  - package.json
+
+# The Next server + worker + migration runner run from the self-contained
+# .next/standalone bundle. electron-builder mangles any node_modules it copies
+# (even via extraResources), so we copy the bundle in ourselves in afterPack —
+# verbatim, symlinks intact — after packaging but before code signing. It lands
+# at Contents/Resources/app/.next/standalone, matching electron/main.js appRoot.
+afterPack: scripts/after-pack.cjs
+
+# electron-builder notarizes + staples the .app but not the .dmg. This hook
+# notarizes + staples each .dmg too, so a downloaded disk image isn't blocked by
+# Gatekeeper on mount. No-op when Apple credentials aren't in the environment.
+afterAllArtifactBuild: scripts/after-all-artifact-build.cjs
+
+mac:
+  category: public.app-category.developer-tools
+  icon: build/icon.png
+  target:
+    - target: dmg
+      arch:
+        - arm64
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  # Notarization is opt-in. Enable with `-c.mac.notarize=true` once Developer ID
+  # signing + Apple credentials are present (see README). Left false so unsigned
+  # local builds work out of the box.
+  notarize: false
+
+dmg:
+  title: ${productName}
+  contents:
+    - x: 130
+      y: 220
+      type: file
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications

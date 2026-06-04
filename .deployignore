@@ -1,0 +1,32 @@
+# rsync excludes for the home-server deploy.sh (--exclude-from). Leading "/" anchors
+# to the repo root. .git / node_modules / .next / caches live in deploy.sh BASE_EXCLUDES.
+#
+# This repo is primarily the S3 Administrator DESKTOP app; only the static website/
+# and the Docker/Caddy deploy files belong on the server. Everything else — the
+# Electron/Next source and the ~770MB release/ build artifacts — is excluded.
+# There is NO .env.prod here (the static site has no secrets); never add one.
+
+/release
+/build
+/electron
+/src
+/prisma
+/scripts
+/public
+/package.json
+/package-lock.json
+/tsconfig.json
+/next.config.ts
+/next-env.d.ts
+/prisma.config.ts
+/postcss.config.mjs
+/eslint.config.mjs
+/components.json
+/instrumentation.ts
+/electron-builder.yml
+/Makefile
+/README.md
+/BUILD_MACOS.md
+/LICENSE
+/.npmrc
+/.nvmrc

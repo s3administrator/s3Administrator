@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-XRFW2MBCVP"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+
+    gtag('config', 'G-XRFW2MBCVP');
+  </script>
+
+  <!-- Theme: apply saved/system preference before first paint (no flash) -->
+  <script>
+    (function () {
+      try {
+        var stored = localStorage.getItem('theme');
+        var sysDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (stored === 'dark' || (!stored && sysDark)) {
+          document.documentElement.classList.add('dark');
+        }
+      } catch (e) {}
+    })();
+  </script>
+
+  <title>S3 Administrator — desktop S3 file manager for macOS</title>
+  <meta name="description" content="A local, native macOS file manager for AWS, Hetzner, Cloudflare R2, MinIO, and any S3-compatible storage. Browse, upload, sync, and migrate across every bucket and credential. No account, no cloud, no telemetry." />
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <meta name="color-scheme" content="light dark" />
+
+  <meta property="og:title" content="S3 Administrator" />
+  <meta property="og:description" content="A local, native S3 file manager for macOS. No account, no cloud, no telemetry." />
+  <meta property="og:type" content="website" />
+
+  <!-- Geist + Geist Mono — the exact fonts the app ships with -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ── Design tokens: ported verbatim from the app's globals.css (:root,
+       shadcn new-york / neutral). Same palette, radius, and fonts. ── */
+    :root {
+      color-scheme: light;
+      --background: oklch(1 0 0);
+      --foreground: oklch(0.145 0 0);
+      --card: oklch(1 0 0);
+      --muted: oklch(0.97 0 0);
+      --muted-foreground: oklch(0.556 0 0);
+      --primary: oklch(0.205 0 0);
+      --primary-foreground: oklch(0.985 0 0);
+      --secondary: oklch(0.97 0 0);
+      --accent: oklch(0.97 0 0);
+      --border: oklch(0.922 0 0);
+      --ring: oklch(0.708 0 0);
+      --marketing: oklch(0.55 0.15 195);          /* the app's --marketing-accent */
+      --marketing-soft: oklch(0.55 0.15 195 / .1);
+      --wash: oklch(0.97 0 0);                     /* soft top-corner page wash */
+
+      --radius: 0.625rem;
+      --r-sm: calc(var(--radius) - 4px);
+      --r-md: calc(var(--radius) - 2px);
+      --r-lg: var(--radius);
+      --r-xl: calc(var(--radius) + 4px);
+
+      --sans: "Geist", system-ui, -apple-system, sans-serif;
+      --mono: "Geist Mono", ui-monospace, monospace;
+
+      --maxw: 1140px;
+    }
+
+    /* ── Dark theme: mirrors the app's globals.css `.dark` (shadcn neutral) ── */
+    .dark {
+      color-scheme: dark;
+      --background: oklch(0.145 0 0);
+      --foreground: oklch(0.985 0 0);
+      --card: oklch(0.205 0 0);
+      --muted: oklch(0.269 0 0);
+      --muted-foreground: oklch(0.708 0 0);
+      --primary: oklch(0.922 0 0);
+      --primary-foreground: oklch(0.205 0 0);
+      --secondary: oklch(0.269 0 0);
+      --accent: oklch(0.269 0 0);
+      --border: oklch(1 0 0 / 10%);
+      --ring: oklch(0.556 0 0);
+      --marketing: oklch(0.65 0.15 195);           /* the app's dark --marketing-accent */
+      --marketing-soft: oklch(0.65 0.15 195 / .12);
+      --wash: oklch(0.205 0 0);                     /* subtle elevated glow, not near-white */
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+    body {
+      font-family: var(--sans);
+      background: var(--background);
+      color: var(--foreground);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      letter-spacing: -.011em;
+      transition: background .25s ease, color .25s ease;
+    }
+    a { color: inherit; text-decoration: none; }
+    ::selection { background: var(--foreground); color: var(--background); }
+    :focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent); border-radius: 6px; }
+
+    .wrap { width: min(100% - 40px, var(--maxw)); margin-inline: auto; }
+    .mono { font-family: var(--mono); }
+    .muted { color: var(--muted-foreground); }
+
+    /* faint top wash + dot grid — barely-there, keeps the page clean */
+    body::before {
+      content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+      background:
+        radial-gradient(900px 420px at 78% -120px, var(--marketing-soft), transparent 70%),
+        radial-gradient(700px 360px at 0% -80px, var(--wash), transparent 70%);
+    }
+
+    /* ── Buttons (shadcn) ── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      font-family: var(--sans); font-weight: 500; font-size: 14px; line-height: 1;
+      height: 40px; padding: 0 22px; border-radius: var(--r-md);
+      border: 1px solid transparent; cursor: pointer; transition: background .15s, border-color .15s, transform .15s, box-shadow .15s; white-space: nowrap;
+    }
+    .btn svg { width: 16px; height: 16px; }
+    .btn-primary { background: var(--primary); color: var(--primary-foreground); }
+    .btn-primary:hover { background: color-mix(in oklch, var(--primary) 90%, white); }
+    .btn-outline { background: var(--background); border-color: var(--border); color: var(--foreground); box-shadow: 0 1px 2px oklch(0 0 0 / .05); }
+    .btn-outline:hover { background: var(--accent); }
+    .btn-sm { height: 34px; padding: 0 14px; font-size: 13.5px; }
+
+    /* ── Nav ── */
+    header.nav { position: sticky; top: 0; z-index: 50; background: color-mix(in oklch, var(--background) 80%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); }
+    .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 60px; }
+    .wordmark { font-weight: 600; font-size: 15.5px; letter-spacing: -.02em; display: inline-flex; align-items: center; gap: 8px; }
+    .wordmark .tag { font-family: var(--mono); font-size: 10px; font-weight: 500; color: var(--marketing); border: 1px solid color-mix(in oklch, var(--marketing) 30%, var(--border)); padding: 2px 6px; border-radius: 999px; letter-spacing: .02em; }
+    .nav-links { display: flex; align-items: center; gap: 26px; }
+    .nav-links a.link { font-size: 14px; color: var(--muted-foreground); transition: color .15s; }
+    .nav-links a.link:hover { color: var(--foreground); }
+
+    /* ── Ghost icon buttons in the nav (theme toggle + GitHub) ── */
+    .theme-toggle, .nav-icon {
+      display: inline-grid; place-items: center;
+      width: 36px; height: 36px; border-radius: var(--r-md);
+      border: 1px solid transparent; background: transparent;
+      color: var(--muted-foreground); cursor: pointer; flex: none;
+      transition: background .15s, color .15s, border-color .15s;
+    }
+    .theme-toggle:hover, .nav-icon:hover { background: var(--accent); color: var(--foreground); border-color: var(--border); }
+    .theme-toggle svg, .nav-icon svg { width: 17px; height: 17px; }
+    .theme-toggle .moon { display: none; }
+    .dark .theme-toggle .sun { display: none; }
+    .dark .theme-toggle .moon { display: block; }
+
+    /* ── Hero ── */
+    .hero { padding: 76px 0 36px; }
+    .hero-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: center; }
+    .badge { display: inline-flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 12px; color: var(--muted-foreground); border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px; background: var(--background); }
+    .badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--marketing); }
+    h1 { font-weight: 600; font-size: clamp(38px, 5.4vw, 60px); line-height: 1.04; letter-spacing: -.035em; margin: 20px 0 0; }
+    .hero p.lede { font-size: clamp(16px, 1.5vw, 18.5px); color: var(--muted-foreground); max-width: 32em; margin-top: 18px; letter-spacing: -.01em; }
+    .cta-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+    .cta-meta { font-family: var(--mono); font-size: 12px; color: var(--muted-foreground); margin-top: 16px; }
+
+    /* reveal */
+    .reveal { opacity: 0; transform: translateY(14px); animation: rise .7s cubic-bezier(.2,.7,.2,1) forwards; }
+    @keyframes rise { to { opacity: 1; transform: none; } }
+    .d1{animation-delay:.04s}.d2{animation-delay:.11s}.d3{animation-delay:.18s}.d4{animation-delay:.26s}.d5{animation-delay:.34s}
+
+    /* ── App window mock — now a real, theme-swapped screenshot ── */
+    .mock { border: 1px solid var(--border); border-radius: var(--r-xl); overflow: hidden; background: var(--card); box-shadow: 0 24px 60px -28px oklch(0 0 0 / .28), 0 2px 8px oklch(0 0 0 / .04); }
+    .mock .shot { display: block; width: 100%; height: auto; }
+    .mock .shot-dark { display: none; }
+    .dark .mock .shot-light { display: none; }
+    .dark .mock .shot-dark { display: block; }
+    .m-title { display: flex; align-items: center; gap: 7px; padding: 10px 12px; border-bottom: 1px solid var(--border); background: var(--muted); }
+    .m-title .d { width: 11px; height: 11px; border-radius: 50%; background: oklch(0.85 0 0); }
+    .m-title .name { margin-left: 8px; font-family: var(--mono); font-size: 11.5px; color: var(--muted-foreground); }
+    .m-body { display: grid; grid-template-columns: 184px 1fr; height: 392px; }
+    .m-side { border-right: 1px solid var(--border); background: color-mix(in oklch, var(--muted) 50%, var(--background)); padding: 12px 10px; font-size: 12.5px; overflow: hidden; }
+    .m-nav { display: flex; align-items: center; gap: 9px; padding: 7px 9px; border-radius: var(--r-md); color: var(--muted-foreground); }
+    .m-nav svg { width: 15px; height: 15px; flex: none; }
+    .m-nav.active { background: var(--background); color: var(--foreground); box-shadow: 0 1px 2px oklch(0 0 0 / .05); border: 1px solid var(--border); }
+    .m-label { font-family: var(--mono); font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted-foreground); margin: 16px 8px 7px; }
+    .m-item { display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: var(--r-md); color: var(--muted-foreground); }
+    .m-item .d2 { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+    .m-item.on { color: var(--foreground); background: var(--accent); }
+    .m-main { display: flex; flex-direction: column; min-width: 0; }
+    .m-top { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--border); }
+    .m-crumb { font-size: 12.5px; color: var(--muted-foreground); display: flex; align-items: center; gap: 6px; }
+    .m-crumb b { color: var(--foreground); font-weight: 500; }
+    .m-crumb svg { width: 14px; height: 14px; }
+    .m-search { margin-left: auto; display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted-foreground); border: 1px solid var(--border); border-radius: var(--r-md); padding: 5px 10px; min-width: 132px; }
+    .m-search svg { width: 13px; height: 13px; }
+    .m-actions { display: flex; gap: 4px; }
+    .m-ibtn { width: 28px; height: 28px; display: grid; place-items: center; border-radius: var(--r-md); border: 1px solid var(--border); background: var(--background); color: var(--muted-foreground); }
+    .m-ibtn svg { width: 14px; height: 14px; }
+    .m-thead, .m-row { display: grid; grid-template-columns: 1fr 84px 96px; align-items: center; gap: 10px; padding: 0 14px; }
+    .m-thead { height: 32px; font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); border-bottom: 1px solid var(--border); }
+    .m-list { padding: 4px 0; overflow: hidden; flex: 1; }
+    .m-row { height: 38px; font-size: 13px; color: var(--foreground); border-radius: 0; }
+    .m-row:hover { background: var(--accent); }
+    .m-row.sel { background: var(--accent); }
+    .m-row .nm { display: flex; align-items: center; gap: 10px; min-width: 0; overflow: hidden; white-space: nowrap; }
+    .m-row .nm svg { width: 16px; height: 16px; flex: none; color: var(--muted-foreground); }
+    .m-row .sz, .m-row .dt { font-family: var(--mono); font-size: 11px; color: var(--muted-foreground); text-align: right; }
+    .m-foot { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-top: 1px solid var(--border); font-size: 11.5px; color: var(--muted-foreground); }
+    .m-foot .bar { flex: 1; height: 5px; border-radius: 3px; background: var(--muted); overflow: hidden; }
+    .m-foot .bar > i { display: block; height: 100%; width: 62%; background: var(--marketing); border-radius: 3px; }
+    .m-foot .mono { font-size: 11px; }
+
+    /* ── Providers ── */
+    .providers { padding: 40px 0; border-top: 1px solid var(--border); margin-top: 40px; }
+    .providers .lab { text-align: center; font-family: var(--mono); font-size: 11.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted-foreground); }
+    .prov-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 12px; margin-top: 20px; }
+    .prov { font-size: 14px; color: var(--muted-foreground); border: 1px solid var(--border); border-radius: 999px; padding: 7px 16px; background: var(--card); }
+    .prov b { color: var(--foreground); font-weight: 600; }
+
+    /* ── Sections ── */
+    section.block { padding: 92px 0; }
+    .sec-head { max-width: 38em; }
+    .sec-head .kick { font-family: var(--mono); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--marketing); }
+    .sec-head h2 { font-weight: 600; font-size: clamp(28px, 3.8vw, 40px); line-height: 1.08; letter-spacing: -.03em; margin-top: 12px; }
+    .sec-head p { color: var(--muted-foreground); font-size: 16.5px; margin-top: 14px; }
+
+    .fu { opacity: 0; transform: translateY(20px); transition: opacity .6s ease, transform .6s cubic-bezier(.2,.7,.2,1); }
+    html.js .fu.in { opacity: 1; transform: none; }
+    html:not(.js) .fu { opacity: 1; transform: none; }
+
+    /* ── Features (cards = shadcn Card) ── */
+    .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 44px; }
+    .card { border: 1px solid var(--border); border-radius: var(--r-xl); background: var(--card); padding: 24px; box-shadow: 0 1px 2px oklch(0 0 0 / .04); transition: box-shadow .2s, border-color .2s, transform .2s; }
+    .card:hover { box-shadow: 0 8px 26px -16px oklch(0 0 0 / .25); transform: translateY(-2px); }
+    .card .ico { width: 38px; height: 38px; border-radius: var(--r-md); display: grid; place-items: center; background: var(--muted); border: 1px solid var(--border); color: var(--foreground); margin-bottom: 16px; }
+    .card .ico svg { width: 19px; height: 19px; }
+    .card h3 { font-weight: 600; font-size: 16.5px; letter-spacing: -.015em; }
+    .card p { color: var(--muted-foreground); font-size: 14px; margin-top: 7px; }
+
+    /* ── Privacy ── */
+    .privacy { border: 1px solid var(--border); border-radius: var(--r-xl); padding: 48px clamp(24px,4vw,52px); background: var(--card); display: grid; grid-template-columns: 1.1fr 1fr; gap: 44px; align-items: center; box-shadow: 0 1px 2px oklch(0 0 0 / .04); }
+    .privacy .kick { font-family: var(--mono); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--marketing); }
+    .privacy h2 { font-weight: 600; font-size: clamp(26px,3.2vw,36px); line-height: 1.1; letter-spacing: -.03em; margin-top: 12px; }
+    .privacy p { color: var(--muted-foreground); margin-top: 14px; font-size: 15.5px; max-width: 34em; }
+    .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .stat { border: 1px solid var(--border); border-radius: var(--r-lg); padding: 18px; background: var(--background); }
+    .stat .k { font-weight: 600; font-size: 24px; letter-spacing: -.02em; }
+    .stat .k em { font-style: normal; color: var(--marketing); }
+    .stat .v { font-family: var(--mono); font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted-foreground); margin-top: 5px; }
+
+    /* ── Steps ── */
+    .steps { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; margin-top: 44px; counter-reset: s; }
+    .step { border: 1px solid var(--border); border-radius: var(--r-xl); padding: 24px; background: var(--card); }
+    .step .n { font-family: var(--mono); font-size: 12px; color: var(--marketing); }
+    .step h3 { font-weight: 600; font-size: 16px; margin-top: 10px; letter-spacing: -.015em; }
+    .step p { color: var(--muted-foreground); font-size: 14px; margin-top: 7px; }
+
+    /* ── Download ── */
+    .download { text-align: center; border: 1px solid var(--border); border-radius: var(--r-xl); padding: 60px clamp(24px,5vw,64px); background:
+        radial-gradient(70% 120% at 50% 0%, var(--marketing-soft), transparent 60%), var(--card);
+      box-shadow: 0 1px 2px oklch(0 0 0 / .04); }
+    .download h2 { font-weight: 600; font-size: clamp(28px,3.6vw,40px); letter-spacing: -.03em; }
+    .download p { color: var(--muted-foreground); margin: 12px auto 0; max-width: 32em; font-size: 16px; }
+    .download .btn-primary { margin-top: 26px; height: 46px; padding: 0 28px; font-size: 15px; }
+    .req { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 24px; }
+    .req span { font-family: var(--mono); font-size: 11.5px; color: var(--muted-foreground); border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px; }
+
+    /* ── Footer ── */
+    footer { border-top: 1px solid var(--border); padding: 36px 0 48px; margin-top: 90px; }
+    .foot { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+    .foot p { color: var(--muted-foreground); font-size: 13px; }
+    .foot .links { display: flex; gap: 20px; font-size: 14px; }
+    .foot .links a { color: var(--muted-foreground); }
+    .foot .links a:hover { color: var(--foreground); }
+
+    /* ── Responsive ── */
+    @media (max-width: 900px) {
+      .hero-grid { grid-template-columns: 1fr; gap: 44px; }
+      .mock { order: -1; }
+      .features, .steps { grid-template-columns: 1fr 1fr; }
+      .privacy { grid-template-columns: 1fr; gap: 28px; }
+    }
+    @media (max-width: 600px) {
+      .nav-links .link { display: none; }
+      .features, .steps, .stats { grid-template-columns: 1fr; }
+      .m-body { grid-template-columns: 120px 1fr; height: 340px; }
+      .m-row .dt, .m-thead span:last-child { display: none; }
+      .m-thead, .m-row { grid-template-columns: 1fr 70px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+      .reveal, .fu { opacity: 1 !important; transform: none !important; }
+      html { scroll-behavior: auto; }
+    }
+  </style>
+</head>
+<body id="top">
+  <!-- ── Nav ── -->
+  <header class="nav">
+    <div class="wrap nav-inner">
+      <a class="wordmark" href="#top">S3 Administrator <span class="tag">macOS</span></a>
+      <nav class="nav-links">
+        <a class="link" href="#features">Features</a>
+        <a class="link" href="#privacy">Privacy</a>
+        <a class="link" href="#how">How it works</a>
+        <a class="nav-icon" href="https://github.com/s3administrator/s3Administrator" target="_blank" rel="noopener" aria-label="View source on GitHub">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.73.5.5 5.73.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.27-.01-1.16-.02-2.1-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.23-1.28-5.23-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 2.9-.39c.98 0 1.97.13 2.9.39 2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.12 3.05.74.81 1.18 1.84 1.18 3.1 0 4.42-2.69 5.39-5.25 5.68.41.36.78 1.07.78 2.16 0 1.56-.01 2.82-.01 3.2 0 .31.21.68.8.56C20.71 21.39 24 17.08 24 12 24 5.73 18.27.5 12 .5Z"/></svg>
+        </a>
+        <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle dark mode">
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+        </button>
+        <a class="btn btn-primary btn-sm" href="#download">Download</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <!-- ── Hero ── -->
+    <section class="hero wrap">
+      <div class="hero-grid">
+        <div>
+          <span class="badge reveal d1"><span class="dot"></span> Open source · Local-first · AGPL-3.0</span>
+          <h1 class="reveal d2">Every S3 bucket,<br>in one native app.</h1>
+          <p class="lede reveal d3">A desktop file manager for AWS, Hetzner, Cloudflare R2, MinIO, and any S3-compatible storage. Browse, upload, sync, and migrate across every bucket and credential — without the AWS console or half-finished CLI scripts.</p>
+          <div class="cta-row reveal d4">
+            <a class="btn btn-primary" href="download/S3-Administrator-0.1.0-arm64.dmg" download>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+              Download for macOS
+            </a>
+            <a class="btn btn-outline" href="#features">Explore features</a>
+          </div>
+          <p class="cta-meta reveal d5">Apple Silicon · v0.1.0 · ~200&nbsp;MB · free &amp; open source</p>
+        </div>
+
+        <!-- faithful app mock -->
+        <div class="mock reveal d4">
+          <img class="shot shot-light" src="assets/app-gallery-light.webp" width="1600" height="1039"
+               alt="S3 Administrator gallery view showing video thumbnails across an S3 bucket" loading="eager" decoding="async">
+          <img class="shot shot-dark" src="assets/app-gallery-dark.webp" width="1600" height="1039"
+               alt="" loading="eager" decoding="async">
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Providers ── -->
+    <section class="providers">
+      <div class="wrap">
+        <p class="lab fu">Works with every S3-compatible provider</p>
+        <div class="prov-row fu">
+          <span class="prov">Amazon <b>S3</b></span>
+          <span class="prov"><b>Hetzner</b></span>
+          <span class="prov">Cloudflare <b>R2</b></span>
+          <span class="prov"><b>MinIO</b></span>
+          <span class="prov"><b>Storadera</b></span>
+          <span class="prov">Backblaze <b>B2</b></span>
+          <span class="prov"><b>Wasabi</b></span>
+          <span class="prov">DigitalOcean <b>Spaces</b></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Features ── -->
+    <section class="block wrap" id="features">
+      <div class="sec-head fu">
+        <p class="kick">The toolkit</p>
+        <h2>Everything you reach for, in one place.</h2>
+        <p>The day-to-day of working in object storage, without juggling the AWS console, the CLI, and three web dashboards.</p>
+      </div>
+      <div class="features">
+        <article class="card fu">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg></div>
+          <h3>Multi-credential, multi-bucket</h3>
+          <p>Connect AWS, Hetzner, R2, MinIO, Storadera and more, then switch between accounts and buckets without leaving the app.</p>
+        </article>
+        <article class="card fu">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg></div>
+          <h3>Full object control</h3>
+          <p>Upload, download, move, rename, delete — plus folder operations, recursive delete, and batch actions across thousands of keys.</p>
+        </article>
+        <article class="card fu">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg></div>
+          <h3>Background tasks</h3>
+          <p>Copy, move, sync, and migrate run in parallel and resume where they left off — close the window and they keep their place.</p>
+        </article>
+        <article class="card fu">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="16" x="6" y="2" rx="2"/><path d="M18 22H4a2 2 0 0 1-2-2V6"/><path d="m22 13-1.3-1.3a2.4 2.4 0 0 0-3.4 0L11 18"/><circle cx="12" cy="8" r="2"/></svg></div>
+          <h3>Gallery &amp; global search</h3>
+          <p>Image and video thumbnails for visual buckets, plus instant search across every indexed file in every bucket.</p>
+        </article>
+        <article class="card fu">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg></div>
+          <h3>Encrypted at rest</h3>
+          <p>Credentials are sealed with AES-256-GCM using a key derived per install. Your keys never leave your machine.</p>
+        </article>
+        <article class="card fu">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 10 2 2 4-4"/><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M12 17v4"/><path d="M8 21h8"/></svg></div>
+          <h3>Fully local, fully private</h3>
+          <p>No account, no cloud, no telemetry. Metadata lives in an embedded PostgreSQL on your own disk.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- ── Privacy ── -->
+    <section class="block wrap" id="privacy">
+      <div class="privacy fu">
+        <div>
+          <p class="kick">Private by design</p>
+          <h2>Your keys. Your data. Your machine.</h2>
+          <p>S3 Administrator never phones home. There's no sign-up and no backend to leak. It boots its own embedded PostgreSQL, encrypts your credentials locally, and talks only to the storage providers you point it at.</p>
+        </div>
+        <div class="stats">
+          <div class="stat"><div class="k"><em>0</em></div><div class="v">Accounts required</div></div>
+          <div class="stat"><div class="k"><em>0</em></div><div class="v">Telemetry events</div></div>
+          <div class="stat"><div class="k">AES-<em>256</em></div><div class="v">GCM at rest</div></div>
+          <div class="stat"><div class="k"><em>100%</em></div><div class="v">On-device</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── How it works ── -->
+    <section class="block wrap" id="how">
+      <div class="sec-head fu">
+        <p class="kick">How it works</p>
+        <h2>Three steps to control.</h2>
+      </div>
+      <div class="steps">
+        <div class="step fu"><div class="n">01</div><h3>Add a credential</h3><p>Paste an access key for AWS, Hetzner, R2, or any S3 endpoint. It's encrypted and stored locally on the spot.</p></div>
+        <div class="step fu"><div class="n">02</div><h3>Browse your buckets</h3><p>Every bucket and object appears instantly — folders, sizes, thumbnails, and search across the whole index.</p></div>
+        <div class="step fu"><div class="n">03</div><h3>Move data at will</h3><p>Drag, sync, or migrate between providers. Long jobs run in the background and pick up exactly where they stopped.</p></div>
+      </div>
+    </section>
+
+    <!-- ── Download ── -->
+    <section class="block wrap" id="download">
+      <div class="download fu">
+        <h2>Download S3 Administrator</h2>
+        <p>Free and open source. Built natively for macOS on Apple Silicon — it boots its own database and opens in seconds.</p>
+        <!-- Replace href with your release URL, or drop the .dmg into website/download/ -->
+        <a class="btn btn-primary" href="download/S3-Administrator-0.1.0-arm64.dmg" download>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+          Download the .dmg
+        </a>
+        <div class="req">
+          <span>macOS 12+</span>
+          <span>Apple Silicon (M1+)</span>
+          <span>~200 MB · v0.1.0</span>
+          <span>AGPL-3.0</span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ── Footer ── -->
+  <footer>
+    <div class="wrap foot">
+      <a class="wordmark" href="#top">S3 Administrator</a>
+      <div class="links">
+        <a href="#features">Features</a>
+        <a href="#download">Download</a>
+        <a href="#privacy">Privacy</a>
+        <a href="https://github.com/s3administrator/s3Administrator" target="_blank" rel="noopener">GitHub</a>
+      </div>
+      <p>© <span id="yr">2026</span> · Released under AGPL-3.0</p>
+    </div>
+  </footer>
+
+  <script>
+    document.documentElement.classList.add('js');
+    document.getElementById('yr').textContent = new Date().getFullYear();
+    const io = new IntersectionObserver((es) => {
+      for (const e of es) if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+    }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
+    document.querySelectorAll('.fu').forEach((el, i) => { el.style.transitionDelay = (i % 3) * 70 + 'ms'; io.observe(el); });
+
+    // Theme toggle — persist the explicit choice; otherwise follow the OS live.
+    const themeToggle = document.getElementById('theme-toggle');
+    if (themeToggle) {
+      themeToggle.addEventListener('click', () => {
+        const isDark = document.documentElement.classList.toggle('dark');
+        try { localStorage.setItem('theme', isDark ? 'dark' : 'light'); } catch (e) {}
+      });
+    }
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+      let stored = null;
+      try { stored = localStorage.getItem('theme'); } catch (err) {}
+      if (!stored) document.documentElement.classList.toggle('dark', e.matches);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,165 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Single hard-coded "local" user row exists at all times. Kept as a real model
+// because most domain rows (credentials, file metadata, tasks) reference userId
+// via foreign keys.
+model User {
+  id    String  @id @default(cuid())
+  name  String?
+  email String  @unique
+  role  String  @default("admin")
+
+  s3Credentials        S3Credential[]
+  fileMetadata         FileMetadata[]
+  fileExtensionStats   UserFileExtensionStat[]
+  backgroundTasks      BackgroundTask[]
+  backgroundTaskRuns   BackgroundTaskRun[]
+  backgroundTaskEvents BackgroundTaskEvent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model S3Credential {
+  id           String  @id @default(cuid())
+  userId       String
+  label        String
+  provider     String  @default("HETZNER")
+  endpoint     String
+  region       String
+  accessKeyEnc String  @db.Text
+  secretKeyEnc String  @db.Text
+  ivAccessKey  String
+  ivSecretKey  String
+  isDefault    Boolean @default(false)
+
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fileMetadata FileMetadata[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model FileMetadata {
+  id           String   @id @default(cuid())
+  userId       String
+  credentialId String
+  bucket       String
+  key          String
+  extension    String   @default("")
+  size         BigInt
+  lastModified DateTime
+  isFolder     Boolean  @default(false)
+
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credential S3Credential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
+
+  @@unique([credentialId, bucket, key])
+  @@index([userId])
+  @@index([credentialId, bucket])
+  @@index([userId, extension])
+}
+
+model UserFileExtensionStat {
+  id        String   @id @default(cuid())
+  userId    String
+  extension String
+  fileCount Int      @default(0)
+  totalSize BigInt   @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, extension])
+  @@index([userId])
+}
+
+model BackgroundTask {
+  id                      String    @id @default(cuid())
+  userId                  String
+  type                    String
+  title                   String
+  status                  String    @default("pending")
+  lifecycleState          String    @default("active")
+  payload                 Json
+  executionPlan           Json?
+  executionHistory        Json?
+  progress                Json?
+  attempts                Int       @default(0)
+  maxAttempts             Int       @default(5)
+  runCount                Int       @default(0)
+  lastError               String?
+  dedupeKey               String?
+  isRecurring             Boolean   @default(false)
+  scheduleCron            String?
+  scheduleIntervalSeconds Int?
+  nextRunAt               DateTime  @default(now())
+  startedAt               DateTime?
+  lastRunAt               DateTime?
+  pausedAt                DateTime?
+  completedAt             DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  user   User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  runs   BackgroundTaskRun[]
+  events BackgroundTaskEvent[]
+
+  @@index([userId, lifecycleState, status, nextRunAt])
+  @@index([userId, dedupeKey, lifecycleState, status])
+  @@index([createdAt])
+}
+
+model BackgroundTaskRun {
+  id         String    @id @default(cuid())
+  taskId     String
+  userId     String
+  runNumber  Int
+  attempt    Int       @default(1)
+  status     String
+  startedAt  DateTime
+  finishedAt DateTime?
+  error      String?
+  metrics    Json?
+  workerId   String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  task   BackgroundTask        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user   User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events BackgroundTaskEvent[]
+
+  @@unique([taskId, runNumber])
+  @@index([taskId, runNumber(sort: Desc)])
+  @@index([userId, startedAt(sort: Desc)])
+  @@index([startedAt])
+}
+
+model BackgroundTaskEvent {
+  id        String   @id @default(cuid())
+  taskId    String
+  runId     String?
+  userId    String
+  at        DateTime @default(now())
+  eventType String
+  message   String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  task BackgroundTask     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  run  BackgroundTaskRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
+  user User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([runId, at(sort: Desc)])
+  @@index([taskId, at(sort: Desc)])
+  @@index([userId, at(sort: Desc)])
+}

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 210" fill="none">
+  <defs>
+    <linearGradient id="markBg" x1="18" y1="14" x2="194" y2="196" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B1220" />
+      <stop offset="0.48" stop-color="#0F766E" />
+      <stop offset="1" stop-color="#155E75" />
+    </linearGradient>
+    <linearGradient id="bucket" x1="106" y1="68" x2="106" y2="156" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2DD4BF" />
+      <stop offset="1" stop-color="#0F766E" />
+    </linearGradient>
+  </defs>
+  <rect x="10" y="10" width="192" height="192" rx="44" fill="url(#markBg)" />
+  <circle cx="106" cy="106" r="68" stroke="#BAE6FD" stroke-opacity="0.45" stroke-width="8" />
+  <ellipse cx="106" cy="72" rx="40" ry="15.5" fill="#99F6E4" />
+  <path d="M66 72V132C66 140.56 83.91 147.5 106 147.5C128.09 147.5 146 140.56 146 132V72H66Z" fill="url(#bucket)" />
+  <ellipse cx="106" cy="101" rx="40" ry="15.5" fill="#2DD4BF" />
+  <ellipse cx="106" cy="132" rx="40" ry="15.5" fill="#14B8A6" />
+  <circle cx="150" cy="54" r="16" fill="#FB923C" />
+  <path d="M150 44L152.8 52.4H161.6L154.4 57.8L157.2 66.2L150 60.8L142.8 66.2L145.6 57.8L138.4 52.4H147.2L150 44Z" fill="#FFF7ED" />
+  <text x="236" y="98" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="54" font-weight="700" fill="#0F172A">
+    S3 Administrator
+  </text>
+  <text x="236" y="138" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="28" fill="#334155">
+    Multi-cloud object storage control
+  </text>
+</svg>

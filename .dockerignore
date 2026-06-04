@@ -1,0 +1,6 @@
+# Minimal build context: the static site + its Caddyfile are all the image needs.
+# Everything else in this repo is the desktop app (Electron/Next source, the
+# 700MB+ release/ artifacts) and would only bloat the build context.
+*
+!website
+!Caddyfile.prod

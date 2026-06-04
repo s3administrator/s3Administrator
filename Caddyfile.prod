@@ -1,0 +1,9 @@
+# Served behind Cloudflare Tunnel: plain HTTP on :80, no TLS here.
+# Cloudflare terminates TLS at the edge; cloudflared reaches this container over
+# the private `edge` docker network. Serves both s3administrator.com and
+# www.s3administrator.com (www -> apex canonicalization is a Cloudflare rule).
+:80 {
+	root * /srv
+	encode gzip zstd
+	file_server
+}

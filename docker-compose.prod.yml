@@ -1,0 +1,36 @@
+# Static site stack: one Caddy container that serves website/ AND acts as the
+# edge proxy on the shared `edge` network (HTTP-only; TLS is at Cloudflare).
+# Follows the home-server fleet conventions — see ../../../home-server/AGENTS.md.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  caddy:
+    build: .
+    image: s3administrator-site
+    container_name: s3administrator-caddy
+    logging: *default-logging
+    # Tiny static server; cap RAM low.
+    mem_limit: 64m
+    mem_reservation: 16m
+    # No host ports: cloudflared reaches this proxy over the shared `edge` network.
+    networks:
+      - edge
+    restart: unless-stopped
+    healthcheck:
+      # Liveness via Caddy's localhost admin API (host-independent). Must hit
+      # 127.0.0.1, not localhost — busybox wget resolves localhost to ::1 and
+      # Caddy's admin API only listens on IPv4.
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:2019/config/ >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+networks:
+  # Shared with the cloudflared edge stack; created once: `docker network create edge`
+  edge:
+    external: true

@@ -1,0 +1,37 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+/logs
+
+# env files
+.env
+.env.local
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# prisma generated client
+/src/generated/prisma
+
+# electron-builder output
+/release/
+/build/icon.png
+
+# served release binary — 204M, deployed via rsync (website/), never committed
+/website/download/*.dmg

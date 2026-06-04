@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="24" y1="20" x2="232" y2="236" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B1220" />
+      <stop offset="0.48" stop-color="#0F766E" />
+      <stop offset="1" stop-color="#155E75" />
+    </linearGradient>
+    <linearGradient id="bucket" x1="128" y1="84" x2="128" y2="192" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2DD4BF" />
+      <stop offset="1" stop-color="#0F766E" />
+    </linearGradient>
+    <linearGradient id="ring" x1="128" y1="34" x2="128" y2="222" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E0F2FE" stop-opacity="0.9" />
+      <stop offset="1" stop-color="#BAE6FD" stop-opacity="0.25" />
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="62" fill="url(#bg)" />
+  <circle cx="128" cy="128" r="90" stroke="url(#ring)" stroke-width="12" />
+  <ellipse cx="128" cy="90" rx="56" ry="22" fill="#99F6E4" />
+  <path d="M72 90V168C72 180.15 97.07 190 128 190C158.93 190 184 180.15 184 168V90H72Z" fill="url(#bucket)" />
+  <ellipse cx="128" cy="128" rx="56" ry="22" fill="#2DD4BF" />
+  <ellipse cx="128" cy="168" rx="56" ry="22" fill="#14B8A6" />
+  <circle cx="190" cy="70" r="22" fill="#FB923C" />
+  <path d="M190 56L193.4 66.6H204L195.2 73.2L198.6 83.8L190 77.2L181.4 83.8L184.8 73.2L176 66.6H186.6L190 56Z" fill="#FFF7ED" />
+</svg>
